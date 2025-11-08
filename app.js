@@ -19,21 +19,19 @@ const firebaseConfig = {
   measurementId: "G-KKYHPNVW7J"
 };
 
-
 const app  = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-//Keeping the anonymous UID across tab closes (until cookies/site data are cleared)
+// Keep anonymous UID across tab closes (until site data is cleared)
 await setPersistence(auth, browserLocalPersistence).catch(console.error);
 const db   = getFirestore(app);
 
-//DOM
+// DOM
 const $ = id => document.getElementById(id);
 const statusEl = $('status'), micEl = $('micDisplay'), locEl = $('locationDisplay');
 const startBtn = $('start'), stopBtn = $('stop');
 const progressEl = $('progress');
 
-//Helpers
-//removing undefined, null, NaN, and "" (recursively)
+// Helpers
 function clean(obj) {
   if (Array.isArray(obj)) {
     return obj.map(clean).filter(v =>
@@ -44,66 +42,80 @@ function clean(obj) {
     const o = {};
     for (const [k, v] of Object.entries(obj)) {
       const vv = clean(v);
-      if (
-        !(vv === undefined || vv === null ||
-          (typeof vv === 'number' && !Number.isFinite(vv)) ||
-          vv === '')
-      ) o[k] = vv;
+      if (!(vv === undefined || vv === null || (typeof vv === 'number' && !Number.isFinite(vv)) || vv === '')) {
+        o[k] = vv;
+      }
     }
     return o;
   }
   return obj;
 }
-
 const fmt  = (n, d) => Number.isFinite(n) ? Number(n).toFixed(d) : '';
 const dbfs = rms => 20 * Math.log10(Math.max(rms, 1e-12));
 
-//Sensor & session state
+// ===== Outlier filtering config =====
+const MIC_WARMUP_MS = 1200;   // ignore first ~1.2 s of mic samples
+const MIN_DBFS      = -100;   // ignore readings below this (startup spikes)
+const MAX_DBFS      = 0;      // sanity upper bound for dBFS
+// ===================================
+
+// Sensor & session state
 let stream, ctx, ana, src, raf;
 let gpsWatchId = null, logging = false;
-
 const micBuf = new Float32Array(2048);
 
-//mic averaging bucket (1s)
+// mic averaging bucket (1s)
 let bucketStart = 0;
 let sumDB = 0;
 let countDB = 0;
+let micStartAt = 0;  // NEW: mic start timestamp
 
-//latest GPS fix
+// latest GPS fix
 let lastPos = null;
 
-//timers
+// timers
 const FLUSH_PERIOD_MS = 1000;
 let flushTimer = null;
 
-//session
+// session
 let currentUID = null;
 let session = { id: null, startedAt: null, endedAt: null, totalReadings: 0 };
 let sessionDocRef = null;
 let readingsColRef = null;
 
-//Auth
+// Auth
 signInAnonymously(auth).catch(console.error);
 onAuthStateChanged(auth, user => { currentUID = user ? user.uid : null; });
 
-//Mic sampler (animation frame)
+// Mic sampler (animation frame)
 function sampleMic() {
   if (!ana) return;
+
   ana.getFloatTimeDomainData(micBuf);
   let s = 0;
   for (let i = 0; i < micBuf.length; i++) s += micBuf[i] * micBuf[i];
   const rms = Math.sqrt(s / micBuf.length);
-  const vdb = dbfs(rms);
+  const vdb = dbfs(rms);                    // raw dBFS value (may be very low at startup)
+
+  // UI: show 1 decimal place
   micEl.textContent = `Mic: ${vdb.toFixed(1)} dBFS`;
 
-  //accumulate into 1-second bucket
-  if (!bucketStart) bucketStart = performance.now();
-  sumDB += vdb; countDB += 1;
+  // Accumulate into 1s bucket only if:
+  // 1) warmed up, and 2) vdb within [MIN_DBFS, MAX_DBFS], and finite
+  const now = performance.now();
+  const warmed = (now - micStartAt) >= MIC_WARMUP_MS;
+
+  if (!bucketStart) bucketStart = now;
+
+  if (warmed && Number.isFinite(vdb) && vdb >= MIN_DBFS && vdb <= MAX_DBFS) {
+    sumDB += vdb;
+    countDB += 1;
+  }
 
   if (logging) raf = requestAnimationFrame(sampleMic);
 }
 
-//GPS via watchPosition
+// GPS via watchPosition
 function startGPS() {
   const opts = { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 };
   gpsWatchId = navigator.geolocation.watchPosition(pos => {
@@ -114,7 +126,6 @@ function startGPS() {
     locEl.textContent = `Location: Error - ${err.message}`;
   }, opts);
 }
-
 function stopGPS() {
   if (gpsWatchId != null) {
     navigator.geolocation.clearWatch(gpsWatchId);
@@ -122,12 +133,12 @@ function stopGPS() {
   }
 }
 
-//1-second flush to Firestore
+// 1-second flush to Firestore
 async function flushOneSecond() {
-  //Both mic avg and GPS fix
+  // need at least one valid mic sample and a GPS fix
   if (!countDB || !lastPos || !currentUID || !sessionDocRef) return;
 
-  const avgDB = sumDB / countDB;
+  const avgDB = sumDB / countDB;  // keep full precision for Firestore
   const when  = new Date();
 
   // reset bucket
@@ -139,7 +150,7 @@ async function flushOneSecond() {
       lat: lastPos.lat,
       lon: lastPos.lon,
       accuracy_m: Number(lastPos.acc),
-      sound_dbfs: Number(avgDB.toFixed(2))
+      sound_dbfs: avgDB            // no rounding: log full precision
     }));
     session.totalReadings += 1;
     progressEl.textContent = `Saved ${session.totalReadings} reading(s)…`;
@@ -149,14 +160,14 @@ async function flushOneSecond() {
   }
 }
 
-//Start / Stop
+// Start / Stop
 async function start() {
   if (!currentUID) { progressEl.textContent = 'Signing in… try again in a moment.'; return; }
 
-  //fresh session
+  // fresh session
   session = { id: null, startedAt: new Date(), endedAt: null, totalReadings: 0 };
 
-  //creating session doc first
+  // create session doc first
   const sessionsCol = collection(db, 'users', currentUID, 'sessions');
   sessionDocRef = doc(sessionsCol); // auto-id
   readingsColRef = collection(sessionDocRef, 'readings');
@@ -164,27 +175,29 @@ async function start() {
   await setDoc(sessionDocRef, clean({
     startedAt: Timestamp.fromDate(session.startedAt),
     samplePeriodMs: FLUSH_PERIOD_MS,
-    device: {
-      userAgent: navigator.userAgent || '',
-      platform: navigator.platform || ''
-    },
+    device: { userAgent: navigator.userAgent || '', platform: navigator.platform || '' },
     createdAt: serverTimestamp()
   }));
 
   session.id = sessionDocRef.id;
 
   try {
-    //mic
+    // mic
     stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     ctx = new (window.AudioContext || window.webkitAudioContext)();
     ana = ctx.createAnalyser(); ana.fftSize = 2048;
     src = ctx.createMediaStreamSource(stream); src.connect(ana);
 
-    //gps
+    // NEW: mark mic start for warm-up filtering
+    micStartAt = performance.now();
+    // reset buckets
+    bucketStart = 0; sumDB = 0; countDB = 0;
+
+    // gps
     if (!('geolocation' in navigator)) throw new Error('Geolocation not available');
     startGPS();
 
-    //loops
+    // loops
     logging = true;
     sampleMic();
     flushTimer = setInterval(flushOneSecond, FLUSH_PERIOD_MS);
@@ -212,10 +225,10 @@ async function stop() {
   statusEl.textContent = 'Stopped';
   startBtn.disabled = false; stopBtn.disabled = true;
 
-  //final flush in case there's a partial bucket with GPS
+  // final flush in case there's a partial bucket with GPS
   await flushOneSecond();
 
-  //update session
+  // update session
   session.endedAt = new Date();
   try {
     await updateDoc(sessionDocRef, clean({
@@ -229,7 +242,7 @@ async function stop() {
     progressEl.textContent = `Session update failed: ${e.message}`;
   }
 
-  //clear working vars
+  // clear working vars
   lastPos = null;
   bucketStart = 0; sumDB = 0; countDB = 0;
 }
