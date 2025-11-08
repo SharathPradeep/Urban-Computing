@@ -313,12 +313,12 @@ async function start() {
     weatherTimer = setInterval(refreshWeatherIfDue, 2000); // cheap poll every 2s; fetch happens each minute
 
     statusEl.classList.remove('stopped'); statusEl.classList.add('running');
-    statusEl.querySelector('#statusText')?.textContent = 'Running…';
+    statusEl.textContent = 'Running…';
     startBtn.disabled = true; stopBtn.disabled = false;
     progressEl.textContent = `Session ${session.id} started`;
   } catch (e) {
     statusEl.classList.remove('running'); statusEl.classList.add('stopped');
-    statusEl.querySelector('#statusText')?.textContent = 'Stopped';
+    statusEl.textContent = 'Stopped';
     progressEl.textContent = 'Error: ' + e.message;
     console.error(e);
   }
