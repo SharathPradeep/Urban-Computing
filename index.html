@@ -2,94 +2,99 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1, viewport-fit=cover"
-  />
-  <title>Sensor Logger (GPS + Mic) · Firestore + Open-Meteo</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sensor Logger · GPS • Mic • Weather • Air Quality</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
   <header class="app-header">
-    <h1>Sensor Logger</h1>
-    <div class="subtitle">GPS • Microphone • Weather • Air Quality</div>
+    <div class="wrap">
+      <h1>Sensor Logger</h1>
+      <p class="subtitle">GPS • Microphone • Weather • Air Quality</p>
+    </div>
   </header>
 
-  <main class="container">
-
-    <section class="card controls">
-      <div class="controls-row">
-        <button id="start" class="btn primary">Start</button>
+  <main class="wrap">
+    <!-- Controls -->
+    <section class="controls">
+      <div class="button-row">
+        <button id="start" class="btn btn-primary">Start</button>
         <button id="stop" class="btn" disabled>Stop</button>
-        <span id="status" class="status-pill stopped">Stopped</span>
+        <span id="status" class="status status-stopped">Stopped</span>
       </div>
-      <div id="progress" class="progress"></div>
-      <div id="sessionMeta" class="muted tiny"></div>
+      <p class="hint">
+        Notes: Weather & Air Quality refresh every 1 minute. Logging starts only after
+        the first weather/air call completes so each 1-second record is stored with the
+        latest 1-minute snapshot.
+      </p>
     </section>
 
-    <section class="grid two">
-      <div class="card">
-        <div class="card-title">Microphone</div>
-        <div id="micDisplay" class="big">Mic: -- dBFS</div>
-        <div class="muted tiny">Averaged every 1s (full-precision saved)</div>
-      </div>
+    <!-- Cards grid -->
+    <section class="grid">
+      <!-- Microphone -->
+      <article class="card">
+        <h2>Microphone</h2>
+        <dl class="kv">
+          <div>
+            <dt>Mic</dt>
+            <dd id="micDisplay">-- dBFS</dd>
+          </div>
+          <div>
+            <dt>Average Window</dt>
+            <dd>Every 1s (full precision saved)</dd>
+          </div>
+        </dl>
+      </article>
 
-      <div class="card">
-        <div class="card-title">Location</div>
-        <div id="locationDisplay" class="big">Location: -- , --</div>
-        <div id="accDisplay" class="muted tiny">Accuracy: -- m</div>
-      </div>
+      <!-- Location -->
+      <article class="card">
+        <h2>Location</h2>
+        <dl class="kv">
+          <div>
+            <dt>Fix</dt>
+            <dd id="locationDisplay">-- , --</dd>
+          </div>
+          <div>
+            <dt>Accuracy</dt>
+            <dd id="locAccuracy">-- m</dd>
+          </div>
+        </dl>
+      </article>
+
+      <!-- Weather -->
+      <article class="card">
+        <h2>Weather (Open-Meteo)</h2>
+        <dl class="kv">
+          <div><dt>Temperature</dt><dd id="wxTemp">-- °C</dd></div>
+          <div><dt>Humidity</dt><dd id="wxHumidity">-- %</dd></div>
+          <div><dt>Wind</dt><dd id="wxWind">-- m/s</dd></div>
+          <div><dt>Precipitation</dt><dd id="wxPrecip">-- mm</dd></div>
+          <div><dt>Last update</dt><dd id="wxUpdated">--</dd></div>
+        </dl>
+      </article>
+
+      <!-- Air Quality -->
+      <article class="card">
+        <h2>Air Quality (Open-Meteo)</h2>
+        <dl class="kv">
+          <div><dt>PM2.5</dt><dd id="aqPM25">-- μg/m³</dd></div>
+          <div><dt>PM10</dt><dd id="aqPM10">-- μg/m³</dd></div>
+          <div><dt>O₃</dt><dd id="aqO3">-- μg/m³</dd></div>
+          <div><dt>NO₂</dt><dd id="aqNO2">-- μg/m³</dd></div>
+          <div><dt>SO₂</dt><dd id="aqSO2">-- μg/m³</dd></div>
+          <div><dt>eAQI</dt><dd id="aqIndex">--</dd></div>
+          <div><dt>Last update</dt><dd id="aqUpdated">--</dd></div>
+        </dl>
+      </article>
     </section>
 
-    <section class="grid two">
-      <div class="card">
-        <div class="card-title">Weather (Open-Meteo)</div>
-        <div class="kv">
-          <div><span class="k">Temperature</span><span id="wxTemp" class="v">-- °C</span></div>
-          <div><span class="k">Humidity</span><span id="wxHumidity" class="v">-- %</span></div>
-          <div><span class="k">Wind</span><span id="wxWind" class="v">-- m/s</span></div>
-          <div><span class="k">Precipitation</span><span id="wxPrecip" class="v">-- mm</span></div>
-        </div>
-        <div class="muted tiny">
-          Last update: <span id="wxUpdated">--</span>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-title">Air Quality (Open-Meteo)</div>
-        <div class="kv">
-          <div><span class="k">PM2.5</span><span id="aqPM25" class="v">-- μg/m³</span></div>
-          <div><span class="k">PM10</span><span id="aqPM10" class="v">-- μg/m³</span></div>
-          <div><span class="k">O₃</span><span id="aqO3" class="v">-- μg/m³</span></div>
-          <div><span class="k">NO₂</span><span id="aqNO2" class="v">-- μg/m³</span></div>
-          <div><span class="k">SO₂</span><span id="aqSO2" class="v">-- μg/m³</span></div>
-          <div><span class="k">eAQI</span><span id="aqIndex" class="v">--</span></div>
-        </div>
-        <div class="muted tiny">
-          Last update: <span id="aqUpdated">--</span>
-        </div>
-      </div>
-    </section>
-
-    <section class="card">
-      <div class="muted tiny">
-        Notes: Weather & Air Quality refresh every 1 minute. Sensor logging starts only
-        after the first weather/air call completes, so each 1-second record is stored together
-        with the latest 1-minute weather/air snapshot.
-      </div>
+    <!-- Progress / messages -->
+    <section class="card callout">
+      <div id="progress">Preparing…</div>
     </section>
   </main>
 
-  <div id="bootOverlay" class="overlay hidden">
-    <div class="overlay-card">
-      <div class="spinner" aria-hidden="true"></div>
-      <div class="overlay-title">Preparing…</div>
-      <div class="overlay-subtitle">
-        Getting initial weather & air-quality before starting sensors
-      </div>
-    </div>
-  </div>
-
+  <!-- App -->
   <script type="module" src="./app.js"></script>
 </body>
 </html>
