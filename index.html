@@ -1,131 +1,60 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Sensor Logger · GPS • Microphone • Weather • Air Quality</title>
-  <link rel="stylesheet" href="./styles.css" />
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Sensor Logger</title>
+<link rel="stylesheet" href="styles.css" />
 </head>
+
 <body>
-  <header class="app-header">
-    <h1>Sensor Logger</h1>
-    <p class="subtitle">GPS • Microphone • Weather • Air Quality</p>
 
-    <div class="controls">
-      <button id="start" class="btn btn-primary">Start</button>
-      <button id="stop" class="btn" disabled>Stop</button>
-      <span id="status" class="status-pill">Stopped</span>
-    </div>
-  </header>
+<header>
+  <h1>Sensor Logger</h1>
+  <p class="subtitle">GPS • Microphone • Weather • Air Quality</p>
+</header>
 
-  <main class="container">
-    <section class="grid">
-      <!-- Microphone -->
-      <article class="card">
-        <header class="card-title">
-          <span class="dot dot-mic"></span> Microphone
-        </header>
-        <div class="kv">
-          <div class="row">
-            <div class="k">Mic</div>
-            <div class="v" id="micDisplay">-- dBFS</div>
-          </div>
-          <div class="row">
-            <div class="k">Average Window</div>
-            <div class="v">Every 1s (full precision saved)</div>
-          </div>
-        </div>
-      </article>
+<div class="controls">
+  <button id="start">Start</button>
+  <button id="stop" disabled>Stop</button>
+  <span id="status" class="status stopped">Stopped</span>
+</div>
 
-      <!-- Location -->
-      <article class="card">
-        <header class="card-title">
-          <span class="dot dot-gps"></span> Location
-        </header>
-        <div class="kv">
-          <div class="row">
-            <div class="k">Fix</div>
-            <div class="v" id="locationDisplay">-- , --</div>
-          </div>
-          <div class="row">
-            <div class="k">Accuracy</div>
-            <div class="v"><span id="accuracyEl">--</span> m</div>
-          </div>
-        </div>
-      </article>
+<div class="grid">
 
-      <!-- Weather -->
-      <article class="card">
-        <header class="card-title">
-          <span class="dot dot-weather"></span> Weather (Open-Meteo)
-        </header>
-        <div class="kv">
-          <div class="row">
-            <div class="k">Temperature</div>
-            <div class="v"><span id="tempEl">--</span> °C</div>
-          </div>
-          <div class="row">
-            <div class="k">Humidity</div>
-            <div class="v"><span id="humidityEl">--</span> %</div>
-          </div>
-          <div class="row">
-            <div class="k">Wind</div>
-            <div class="v"><span id="windEl">--</span> m/s</div>
-          </div>
-          <div class="row">
-            <div class="k">Precipitation</div>
-            <div class="v"><span id="precipEl">--</span> mm</div>
-          </div>
-          <div class="row small">
-            <div class="k">Last update</div>
-            <div class="v" id="meteoUpdatedEl">--</div>
-          </div>
-        </div>
-      </article>
+  <div class="card">
+    <h2>Microphone</h2>
+    <div class="row"><label>Mic Level:</label> <span id="micDisplay">-- dBFS</span></div>
+    <small>Averaged every 1s (full precision saved)</small>
+  </div>
 
-      <!-- Air Quality -->
-      <article class="card">
-        <header class="card-title">
-          <span class="dot dot-air"></span> Air Quality (Open-Meteo)
-        </header>
-        <div class="kv">
-          <div class="row">
-            <div class="k">PM2.5</div>
-            <div class="v"><span id="pm25El">--</span> μg/m³</div>
-          </div>
-          <div class="row">
-            <div class="k">PM10</div>
-            <div class="v"><span id="pm10El">--</span> μg/m³</div>
-          </div>
-          <div class="row">
-            <div class="k">O₃</div>
-            <div class="v"><span id="o3El">--</span> μg/m³</div>
-          </div>
-          <div class="row">
-            <div class="k">NO₂</div>
-            <div class="v"><span id="no2El">--</span> μg/m³</div>
-          </div>
-          <div class="row">
-            <div class="k">SO₂</div>
-            <div class="v"><span id="so2El">--</span> μg/m³</div>
-          </div>
-          <div class="row">
-            <div class="k">eAQI</div>
-            <div class="v" id="aqiEl">--</div>
-          </div>
-          <div class="row small">
-            <div class="k">Last update</div>
-            <div class="v" id="aqUpdatedEl">--</div>
-          </div>
-        </div>
-      </article>
-    </section>
+  <div class="card">
+    <h2>Location</h2>
+    <div class="row"><label>Lat, Lon:</label> <span id="locationDisplay">-- , --</span></div>
+    <div class="row"><label>Accuracy:</label> <span id="accuracyDisplay">-- m</span></div>
+  </div>
 
-    <section class="card output">
-      <div id="progress">Preparing…</div>
-    </section>
-  </main>
+  <div class="card">
+    <h2>Weather (Open-Meteo)</h2>
+    <div class="row"><label>Temperature:</label> <span id="tempDisplay">-- °C</span></div>
+    <div class="row"><label>Humidity:</label> <span id="humDisplay">-- %</span></div>
+    <div class="row"><label>Wind Speed:</label> <span id="windDisplay">-- m/s</span></div>
+    <div class="row"><label>Precipitation:</label> <span id="precipDisplay">-- mm</span></div>
+    <small id="weatherTime">Last update: --</small>
+  </div>
 
-  <script type="module" src="./app.js"></script>
+  <div class="card">
+    <h2>Air Quality (Open-Meteo)</h2>
+    <div class="row"><label>PM2.5:</label> <span id="pm25Display">-- µg/m³</span></div>
+    <div class="row"><label>PM10:</label> <span id="pm10Display">-- µg/m³</span></div>
+    <div class="row"><label>EU AQI:</label> <span id="aqiDisplay">--</span></div>
+    <small id="airTime">Last update: --</small>
+  </div>
+
+</div>
+
+<div id="progress" class="footer-status">Preparing…</div>
+
+<script type="module" src="./app.js"></script>
 </body>
 </html>

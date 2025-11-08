@@ -2,23 +2,34 @@ body {
   margin: 0;
   padding: 0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  background: #f4f6fa;
+  background: #f5f6fa;
   color: #222;
 }
 
+header {
+  text-align: center;
+  padding: 24px 16px 12px;
+}
+
 h1 {
-  font-size: 2.3rem;
+  font-size: 2rem;
   font-weight: 700;
-  margin: 0 0 8px;
+  margin: 0;
 }
 
-.top-bar {
-  margin-bottom: 18px;
+.subtitle {
+  margin-top: 4px;
+  color: #666;
   font-size: 14px;
-  color: #4b4b4b;
 }
 
-/* Buttons */
+.controls {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px 0;
+}
+
 button {
   padding: 8px 18px;
   border-radius: 8px;
@@ -28,88 +39,59 @@ button {
   transition: 0.15s;
 }
 
-#start {
-  background: #2a72ff;
-  color: #fff;
-}
+#start { background: #2a72ff; color: #fff; }
+#start:hover { background: #155ce2; }
 
-#start:hover {
-  background: #1a5be0;
-}
+#stop { background: #ddd; color: #444; }
+#stop:hover { background: #ccc; }
 
-#stop {
-  background: #e5e7eb;
-  color: #555;
-}
-
-#stop:hover {
-  background: #d4d6da;
-}
-
-#status {
-  margin-left: 12px;
+.status {
   font-weight: 600;
+  align-self: center;
+  padding-left: 4px;
 }
 
-/* Cards Grid */
-.dashboard-grid {
+.status.running { color: #1a7f00; }
+.status.stopped { color: #b10000; }
+
+.grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 18px;
-  padding: 24px 0;
+  padding: 20px;
 }
 
-/* Card */
 .card {
   background: white;
   border-radius: 14px;
-  padding: 24px;
+  padding: 20px;
   box-shadow: 0 3px 18px rgba(0,0,0,0.06);
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
 }
 
 .card h2 {
-  margin: 0 0 10px;
-  font-size: 18px;
+  margin: 0 0 12px;
+  font-size: 16px;
   font-weight: 600;
 }
 
-.card table {
-  width: 100%;
-  border-collapse: collapse;
+.row {
+  display: flex;
+  justify-content: space-between;
+  margin: 6px 0;
   font-size: 15px;
 }
 
-.card table td:first-child {
-  font-weight: 500;
-  padding-right: 16px;
-}
+.row label { color: #555; font-weight: 500; }
 
-.card table td:last-child {
-  text-align: right;
-  opacity: 0.8;
-}
-
-/* Footer */
-#progress {
+.footer-status {
   background: white;
-  padding: 18px;
+  margin: 20px;
+  padding: 16px;
   border-radius: 14px;
+  text-align: center;
   box-shadow: 0 3px 18px rgba(0,0,0,0.06);
-  margin-top: 12px;
 }
 
-/* ✅ Mobile responsiveness */
 @media (max-width: 768px) {
-  .dashboard-grid {
-    grid-template-columns: 1fr;
-  }
-  h1 {
-    font-size: 1.8rem;
-  }
-  .card {
-    padding: 20px;
-  }
+  .grid { grid-template-columns: 1fr; }
 }
