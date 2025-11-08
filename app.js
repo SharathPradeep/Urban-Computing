@@ -1,11 +1,9 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
 import {
-  getAuth, signInAnonymously, onAuthStateChanged, setPersistence,
-  browserLocalPersistence
+  getAuth, signInAnonymously, onAuthStateChanged, setPersistence, browserLocalPersistence
 } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-auth.js";
 import {
-  getFirestore, doc, setDoc, collection, addDoc,
-  serverTimestamp, Timestamp, updateDoc
+  getFirestore, doc, setDoc, collection, addDoc, serverTimestamp, Timestamp, updateDoc
 } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js";
 
 //FIREBASE INIT
@@ -27,24 +25,24 @@ const db = getFirestore(app);
 //DOM GETTERS
 const $ = id => document.getElementById(id);
 
-const micEl = $("micDisplay");
-const locEl = $("locationDisplay");
-const accEl = $("accuracyDisplay");
+const micEl      = $("micDisplay");
+const locEl      = $("locationDisplay");
+const accEl      = $("accuracyDisplay");
 
-const tempEl   = $("tempDisplay");
-const humEl    = $("humDisplay");
-const windEl   = $("windDisplay");
-const precipEl = $("precipDisplay");
-const wxTimeEl = $("weatherTime");
+const tempEl     = $("tempDisplay");
+const humEl      = $("humDisplay");
+const windEl     = $("windDisplay");
+const precipEl   = $("precipDisplay");
+const wxTimeEl   = $("weatherTime");
 
-const pm25El   = $("pm25Display");
-const pm10El   = $("pm10Display");
-const aqiEl    = $("aqiDisplay");
-const airTimeEl= $("airTime");
+const pm25El     = $("pm25Display");
+const pm10El     = $("pm10Display");
+const aqiEl      = $("aqiDisplay");
+const airTimeEl  = $("airTime");
 
-const startBtn = $("start");
-const stopBtn  = $("stop");
-const statusEl = $("status");
+const startBtn   = $("start");
+const stopBtn    = $("stop");
+const statusEl   = $("status");
 const progressEl = $("progress");
 
 //HELPERS
@@ -62,9 +60,33 @@ function clean(obj) {
   }
   return obj;
 }
-
 const fmt  = (n, d) => Number.isFinite(n) ? Number(n).toFixed(d) : "--";
 const dbfs = rms => 20 * Math.log10(Math.max(rms, 1e-12));
+
+//delay (ms) until next boundary of minutesStep
+function delayToNextBoundary(minutesStep) {
+  const now = new Date();
+  const ms = now.getTime();
+
+  const stepMs = minutesStep * 60 * 1000;
+  //Using local clock boundary
+  const sinceEpoch = ms;
+  const next = Math.ceil(sinceEpoch / stepMs) * stepMs;
+  return Math.max(0, next - sinceEpoch);
+}
+
+// schedules a one-shot timeout aligned to the next boundary, then fixed-intervals after that
+function scheduleAligned(minutesStep, fn, holders) {
+  clearTimeout(holders.timeoutId);
+  clearInterval(holders.intervalId);
+
+  holders.timeoutId = setTimeout(async () => {
+    try { await fn(); } catch (e) { console.error(e); }
+    holders.intervalId = setInterval(async () => {
+      try { await fn(); } catch (e) { console.error(e); }
+    }, minutesStep * 60 * 1000);
+  }, delayToNextBoundary(minutesStep));
+}
 
 //MIC STATE
 const MIC_WARMUP_MS = 1200;
@@ -76,21 +98,27 @@ let stream, ctx, ana, src, raf;
 let micStartAt = 0;
 let sumDB = 0, countDB = 0, bucketStart = 0;
 
-//GPS & REFRESH CADENCE
+//GPS & WEATHER
 let gpsWatchId = null;
 let lastPos = null;
 
-const FLUSH_PERIOD_MS   = 1000;                 // save sensors every second
-const WX_REFRESH_MS     = 15 * 60 * 1000;       // 15 minutes
-const AIR_REFRESH_MS    = 60 * 60 * 1000;       // 1 hour
-
-let flushTimer   = null;
-let refreshTimer = null; // checks if either API is due
+const FLUSH_PERIOD_MS = 1000;
+let flushTimer = null;
 let logging = false;
 
-//WEATHER / AIR CACHE 
-let weatherCache = { data: null, fetchedAt: 0 };
-let airCache     = { data: null, fetchedAt: 0 };
+//cache with separate timestamps
+let wxCache = {
+  weather: null,        //Open-Meteo current
+  weatherFetchedAt: 0,  //ms
+  air: null,            //Open-Meteo Air current
+  airFetchedAt: 0       //ms
+};
+
+//aligned timers (timeout + interval pairs)
+const timers = {
+  wx: { timeoutId: null, intervalId: null },   //15 minutes boundaries
+  air: { timeoutId: null, intervalId: null }   //top-of-hour boundaries
+};
 
 //SESSION STORAGE
 let currentUID = null;
@@ -112,7 +140,7 @@ function sampleMic() {
   const rms = Math.sqrt(s / micBuf.length);
   const vdb = dbfs(rms);
 
-  micEl.textContent = `${fmt(vdb, 1)} dBFS`;
+  micEl.textContent = `${fmt(vdb, 1)} dBFS`; 
 
   const now = performance.now();
   const warmed = (now - micStartAt) >= MIC_WARMUP_MS;
@@ -133,92 +161,84 @@ function startGPS() {
     lastPos = { lat: latitude, lon: longitude, acc: accuracy };
     locEl.textContent = `${fmt(latitude, 6)}, ${fmt(longitude, 6)}`;
     accEl.textContent = `${fmt(accuracy, 1)} m`;
-  }, _err => {
+  }, err => {
     locEl.textContent = "Location Error";
-  }, { enableHighAccuracy: true, timeout: 10000 });
+    console.error(err);
+  }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
 }
 
 function stopGPS() {
-  if (gpsWatchId) navigator.geolocation.clearWatch(gpsWatchId);
+  if (gpsWatchId) {
+    navigator.geolocation.clearWatch(gpsWatchId);
+    gpsWatchId = null;
+  }
 }
 
 function getCurrentPositionOnce() {
   return new Promise((resolve, reject) =>
-    navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 15000 })
+    navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 })
   );
 }
 
-//WEATHER / AIR API
+//OPEN-METEO FETCHERS
 async function fetchWeather(lat, lon) {
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
     `&current=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation,cloud_cover&timezone=auto`;
-  const json = await fetch(url).then(r => r.json());
-  return json.current || null;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Weather fetch failed: ${res.status}`);
+  const json = await res.json();
+
+  wxCache.weather = json.current ?? null;
+  wxCache.weatherFetchedAt = Date.now();
+  //UI update
+  if (wxCache.weather) {
+    tempEl.textContent   = `${fmt(wxCache.weather.temperature_2m, 1)} °C`;
+    humEl.textContent    = `${fmt(wxCache.weather.relative_humidity_2m, 0)} %`;
+    windEl.textContent   = `${fmt(wxCache.weather.wind_speed_10m, 1)} m/s`;
+    precipEl.textContent = `${fmt(wxCache.weather.precipitation, 1)} mm`;
+    wxTimeEl.textContent = `Last update: ${wxCache.weather.time || "--"}`;
+  }
 }
 
 async function fetchAir(lat, lon) {
   const url =
     `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}` +
     `&current=pm2_5,pm10,ozone,nitrogen_dioxide,sulphur_dioxide,european_aqi&timezone=auto`;
-  const json = await fetch(url).then(r => r.json());
-  return json.current || null;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Air fetch failed: ${res.status}`);
+  const json = await res.json();
+
+  wxCache.air = json.current ?? null;
+  wxCache.airFetchedAt = Date.now();
+  //UI update
+  if (wxCache.air) {
+    pm25El.textContent = `${fmt(wxCache.air.pm2_5, 1)} µg/m³`;
+    pm10El.textContent = `${fmt(wxCache.air.pm10, 1)} µg/m³`;
+    aqiEl.textContent   = `${fmt(wxCache.air.european_aqi, 0)}`;
+    airTimeEl.textContent = `Last update: ${wxCache.air.time || "--"}`;
+  }
 }
 
-function updateWeatherUI(w) {
-  if (!w) return;
-  tempEl.textContent   = `${fmt(w.temperature_2m, 1)} °C`;
-  humEl.textContent    = `${fmt(w.relative_humidity_2m, 0)} %`;
-  windEl.textContent   = `${fmt(w.wind_speed_10m, 1)} m/s`;
-  precipEl.textContent = `${fmt(w.precipitation, 1)} mm`;
-  wxTimeEl.textContent = `Last update: ${w.time || "--"}`;
-}
-
-function updateAirUI(a) {
-  if (!a) return;
-  pm25El.textContent = `${fmt(a.pm2_5, 1)} µg/m³`;
-  pm10El.textContent = `${fmt(a.pm10, 1)} µg/m³`;
-  aqiEl.textContent   = fmt(a.european_aqi, 0);
-  airTimeEl.textContent = `Last update: ${a.time || "--"}`;
-}
-
-//PERIODIC REFRESH (15m / 1h)
-async function refreshExternalIfDue() {
+//ALIGNED REFRESH LOOPS
+// starts the aligned refreshers (15-minute weather, hourly air)
+function startAlignedRefreshers() {
   if (!lastPos) return;
+  scheduleAligned(15, () => fetchWeather(lastPos.lat, lastPos.lon), timers.wx);
+  scheduleAligned(60, () => fetchAir(lastPos.lat, lastPos.lon), timers.air);
+}
 
-  const now = Date.now();
-
-  //Weather every 15 minutes
-  if (now - weatherCache.fetchedAt >= WX_REFRESH_MS) {
-    try {
-      const w = await fetchWeather(lastPos.lat, lastPos.lon);
-      if (w) {
-        weatherCache = { data: w, fetchedAt: now };
-        updateWeatherUI(w);
-      }
-    } catch (e) {
-      console.error("Weather refresh failed:", e);
-    }
-  }
-
-  //Air quality every 1 hour
-  if (now - airCache.fetchedAt >= AIR_REFRESH_MS) {
-    try {
-      const a = await fetchAir(lastPos.lat, lastPos.lon);
-      if (a) {
-        airCache = { data: a, fetchedAt: now };
-        updateAirUI(a);
-      }
-    } catch (e) {
-      console.error("Air refresh failed:", e);
-    }
-  }
+function stopAlignedRefreshers() {
+  clearTimeout(timers.wx.timeoutId);   clearInterval(timers.wx.intervalId);
+  clearTimeout(timers.air.timeoutId);  clearInterval(timers.air.intervalId);
+  timers.wx.timeoutId = timers.wx.intervalId = null;
+  timers.air.timeoutId = timers.air.intervalId = null;
 }
 
 //DATA SAVE PER SECOND
 async function flushOneSecond() {
-  //need 1s mic avg + gps + both weather & air snapshots
-  if (!countDB || !lastPos || !weatherCache.data || !airCache.data || !sessionDocRef) return;
+  //Need: valid mic bucket, gps fix, weather snapshot, air snapshot, session doc
+  if (!countDB || !lastPos || !wxCache.weather || !wxCache.air || !sessionDocRef) return;
 
   const avgDB = sumDB / countDB;
   sumDB = 0; countDB = 0;
@@ -229,8 +249,8 @@ async function flushOneSecond() {
     lon: lastPos.lon,
     accuracy_m: lastPos.acc,
     sound_dbfs: avgDB,
-    weather: weatherCache.data,
-    air: airCache.data
+    weather: wxCache.weather,
+    air: wxCache.air
   }));
   session.totalReadings++;
   progressEl.textContent = `Saved ${session.totalReadings} readings…`;
@@ -238,8 +258,8 @@ async function flushOneSecond() {
 
 //START
 async function start() {
-  if (!currentUID) { progressEl.textContent = "Signing in…"; return; }
-  if (!navigator.geolocation) { progressEl.textContent = "GPS Not Available"; return; }
+  if (!currentUID) return (progressEl.textContent = "Signing in…");
+  if (!navigator.geolocation) return (progressEl.textContent = "GPS Not Available");
 
   session = { id: null, startedAt: new Date(), endedAt: null, totalReadings: 0 };
 
@@ -250,31 +270,31 @@ async function start() {
   await setDoc(sessionDocRef, clean({
     startedAt: Timestamp.fromDate(session.startedAt),
     samplePeriodMs: FLUSH_PERIOD_MS,
-    weatherRefreshMs: WX_REFRESH_MS,
-    airRefreshMs: AIR_REFRESH_MS,
+    weatherAligned: "every 15 min (:00/:15/:30/:45)",
+    airAligned: "hourly (:00)",
     device: { userAgent: navigator.userAgent, platform: navigator.platform },
     createdAt: serverTimestamp()
   }));
 
-  //Initial GPS
+  //Initial GPS fix
   progressEl.textContent = "Getting GPS Fix…";
   const first = await getCurrentPositionOnce();
   lastPos = { lat: first.coords.latitude, lon: first.coords.longitude, acc: first.coords.accuracy };
   locEl.textContent = `${fmt(lastPos.lat,6)}, ${fmt(lastPos.lon,6)}`;
   accEl.textContent = `${fmt(lastPos.acc,1)} m`;
 
-  //Initial Weather + Air: wait before logging
+  //Initial weather + air
   progressEl.textContent = "Fetching Weather & Air…";
-  const [w0, a0] = await Promise.all([
-    fetchWeather(lastPos.lat, lastPos.lon),
-    fetchAir(lastPos.lat, lastPos.lon)
-  ]);
-  weatherCache = { data: w0, fetchedAt: Date.now() };
-  airCache     = { data: a0, fetchedAt: Date.now() };
-  updateWeatherUI(w0);
-  updateAirUI(a0);
+  try {
+    await Promise.all([ fetchWeather(lastPos.lat, lastPos.lon), fetchAir(lastPos.lat, lastPos.lon) ]);
+  } catch (e) {
+    console.error(e);
+  }
 
-  //Start continuous GPS + Mic + timers
+  //Start aligned refreshers
+  startAlignedRefreshers();
+
+  //Start GPS watch + mic + per-second flush
   startGPS();
 
   stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -285,29 +305,28 @@ async function start() {
 
   logging = true;
   sampleMic();
-
-  flushTimer   = setInterval(flushOneSecond, FLUSH_PERIOD_MS);
-  refreshTimer = setInterval(refreshExternalIfDue, 10_000);
+  flushTimer = setInterval(flushOneSecond, FLUSH_PERIOD_MS);
 
   statusEl.textContent = "Running…";
   statusEl.classList.remove("stopped"); statusEl.classList.add("running");
   startBtn.disabled = true; stopBtn.disabled = false;
-  progressEl.textContent = `Session ${sessionDocRef.id} started`;
+  progressEl.textContent = `Session started (${sessionDocRef.id})`;
 }
 
 //STOP
 async function stop() {
   logging = false;
+
   if (raf) cancelAnimationFrame(raf);
-  if (flushTimer)   clearInterval(flushTimer);
-  if (refreshTimer) clearInterval(refreshTimer);
+  if (flushTimer) { clearInterval(flushTimer); flushTimer = null; }
+  stopAlignedRefreshers();
   stopGPS();
 
   try { src && src.disconnect(); } catch {}
   try { ctx && ctx.close(); } catch {}
   try { stream && stream.getTracks().forEach(t => t.stop()); } catch {}
 
-  //final flush if we have a partial bucket
+  //one last flush if possible
   await flushOneSecond();
 
   session.endedAt = new Date();
@@ -317,14 +336,15 @@ async function stop() {
     updatedAt: serverTimestamp()
   }));
 
-  progressEl.textContent = `Session Complete (${session.totalReadings} readings).`;
-
   startBtn.disabled = false;
   stopBtn.disabled = true;
   statusEl.textContent = "Stopped";
   statusEl.classList.remove("running"); statusEl.classList.add("stopped");
+  progressEl.textContent = `Session complete (${session.totalReadings} readings).`;
+
+  //reset cache
+  wxCache = { weather: null, weatherFetchedAt: 0, air: null, airFetchedAt: 0 };
 }
 
-//EVENT HOOKS
 startBtn.addEventListener("click", start);
 stopBtn.addEventListener("click", stop);
