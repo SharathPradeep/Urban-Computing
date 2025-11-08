@@ -3,98 +3,129 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Sensor Logger · GPS • Mic • Weather • Air Quality</title>
+  <title>Sensor Logger · GPS • Microphone • Weather • Air Quality</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
   <header class="app-header">
-    <div class="wrap">
-      <h1>Sensor Logger</h1>
-      <p class="subtitle">GPS • Microphone • Weather • Air Quality</p>
+    <h1>Sensor Logger</h1>
+    <p class="subtitle">GPS • Microphone • Weather • Air Quality</p>
+
+    <div class="controls">
+      <button id="start" class="btn btn-primary">Start</button>
+      <button id="stop" class="btn" disabled>Stop</button>
+      <span id="status" class="status-pill">Stopped</span>
     </div>
   </header>
 
-  <main class="wrap">
-    <!-- Controls -->
-    <section class="controls">
-      <div class="button-row">
-        <button id="start" class="btn btn-primary">Start</button>
-        <button id="stop" class="btn" disabled>Stop</button>
-        <span id="status" class="status status-stopped">Stopped</span>
-      </div>
-      <p class="hint">
-        Notes: Weather & Air Quality refresh every 1 minute. Logging starts only after
-        the first weather/air call completes so each 1-second record is stored with the
-        latest 1-minute snapshot.
-      </p>
-    </section>
-
-    <!-- Cards grid -->
+  <main class="container">
     <section class="grid">
       <!-- Microphone -->
       <article class="card">
-        <h2>Microphone</h2>
-        <dl class="kv">
-          <div>
-            <dt>Mic</dt>
-            <dd id="micDisplay">-- dBFS</dd>
+        <header class="card-title">
+          <span class="dot dot-mic"></span> Microphone
+        </header>
+        <div class="kv">
+          <div class="row">
+            <div class="k">Mic</div>
+            <div class="v" id="micDisplay">-- dBFS</div>
           </div>
-          <div>
-            <dt>Average Window</dt>
-            <dd>Every 1s (full precision saved)</dd>
+          <div class="row">
+            <div class="k">Average Window</div>
+            <div class="v">Every 1s (full precision saved)</div>
           </div>
-        </dl>
+        </div>
       </article>
 
       <!-- Location -->
       <article class="card">
-        <h2>Location</h2>
-        <dl class="kv">
-          <div>
-            <dt>Fix</dt>
-            <dd id="locationDisplay">-- , --</dd>
+        <header class="card-title">
+          <span class="dot dot-gps"></span> Location
+        </header>
+        <div class="kv">
+          <div class="row">
+            <div class="k">Fix</div>
+            <div class="v" id="locationDisplay">-- , --</div>
           </div>
-          <div>
-            <dt>Accuracy</dt>
-            <dd id="locAccuracy">-- m</dd>
+          <div class="row">
+            <div class="k">Accuracy</div>
+            <div class="v"><span id="accuracyEl">--</span> m</div>
           </div>
-        </dl>
+        </div>
       </article>
 
       <!-- Weather -->
       <article class="card">
-        <h2>Weather (Open-Meteo)</h2>
-        <dl class="kv">
-          <div><dt>Temperature</dt><dd id="wxTemp">-- °C</dd></div>
-          <div><dt>Humidity</dt><dd id="wxHumidity">-- %</dd></div>
-          <div><dt>Wind</dt><dd id="wxWind">-- m/s</dd></div>
-          <div><dt>Precipitation</dt><dd id="wxPrecip">-- mm</dd></div>
-          <div><dt>Last update</dt><dd id="wxUpdated">--</dd></div>
-        </dl>
+        <header class="card-title">
+          <span class="dot dot-weather"></span> Weather (Open-Meteo)
+        </header>
+        <div class="kv">
+          <div class="row">
+            <div class="k">Temperature</div>
+            <div class="v"><span id="tempEl">--</span> °C</div>
+          </div>
+          <div class="row">
+            <div class="k">Humidity</div>
+            <div class="v"><span id="humidityEl">--</span> %</div>
+          </div>
+          <div class="row">
+            <div class="k">Wind</div>
+            <div class="v"><span id="windEl">--</span> m/s</div>
+          </div>
+          <div class="row">
+            <div class="k">Precipitation</div>
+            <div class="v"><span id="precipEl">--</span> mm</div>
+          </div>
+          <div class="row small">
+            <div class="k">Last update</div>
+            <div class="v" id="meteoUpdatedEl">--</div>
+          </div>
+        </div>
       </article>
 
       <!-- Air Quality -->
       <article class="card">
-        <h2>Air Quality (Open-Meteo)</h2>
-        <dl class="kv">
-          <div><dt>PM2.5</dt><dd id="aqPM25">-- μg/m³</dd></div>
-          <div><dt>PM10</dt><dd id="aqPM10">-- μg/m³</dd></div>
-          <div><dt>O₃</dt><dd id="aqO3">-- μg/m³</dd></div>
-          <div><dt>NO₂</dt><dd id="aqNO2">-- μg/m³</dd></div>
-          <div><dt>SO₂</dt><dd id="aqSO2">-- μg/m³</dd></div>
-          <div><dt>eAQI</dt><dd id="aqIndex">--</dd></div>
-          <div><dt>Last update</dt><dd id="aqUpdated">--</dd></div>
-        </dl>
+        <header class="card-title">
+          <span class="dot dot-air"></span> Air Quality (Open-Meteo)
+        </header>
+        <div class="kv">
+          <div class="row">
+            <div class="k">PM2.5</div>
+            <div class="v"><span id="pm25El">--</span> μg/m³</div>
+          </div>
+          <div class="row">
+            <div class="k">PM10</div>
+            <div class="v"><span id="pm10El">--</span> μg/m³</div>
+          </div>
+          <div class="row">
+            <div class="k">O₃</div>
+            <div class="v"><span id="o3El">--</span> μg/m³</div>
+          </div>
+          <div class="row">
+            <div class="k">NO₂</div>
+            <div class="v"><span id="no2El">--</span> μg/m³</div>
+          </div>
+          <div class="row">
+            <div class="k">SO₂</div>
+            <div class="v"><span id="so2El">--</span> μg/m³</div>
+          </div>
+          <div class="row">
+            <div class="k">eAQI</div>
+            <div class="v" id="aqiEl">--</div>
+          </div>
+          <div class="row small">
+            <div class="k">Last update</div>
+            <div class="v" id="aqUpdatedEl">--</div>
+          </div>
+        </div>
       </article>
     </section>
 
-    <!-- Progress / messages -->
-    <section class="card callout">
+    <section class="card output">
       <div id="progress">Preparing…</div>
     </section>
   </main>
 
-  <!-- App -->
   <script type="module" src="./app.js"></script>
 </body>
 </html>
