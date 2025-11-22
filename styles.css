@@ -1,3 +1,23 @@
+:root {
+  --bg: #eef2ff;
+  --bg-alt: #ecfdf5;
+  --card-bg: #ffffff;
+  --card-soft: #f9fafb;
+  --accent: #2563eb;       /* primary blue */
+  --accent-alt: #22c55e;   /* green accent */
+  --accent-soft: #dbeafe;  /* light blue */
+  --accent-soft-green: #dcfce7;
+  --accent-deep: #1e40af;
+  --text-main: #0f172a;
+  --text-muted: #64748b;
+  --border-soft: #e5e7eb;
+  --danger: #ef4444;
+}
+
+/* ------------------------------------------------------------------ */
+/* Base                                                                */
+/* ------------------------------------------------------------------ */
+
 *,
 *::before,
 *::after {
@@ -8,19 +28,22 @@ body {
   margin: 0;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
     "Segoe UI", sans-serif;
-  background: #f3f4f6;
-  color: #111827;
+  background: radial-gradient(circle at top left, var(--bg-alt), var(--bg));
+  color: var(--text-main);
 }
 
 .hidden {
   display: none !important;
 }
 
+/* ------------------------------------------------------------------ */
+/* Shell & header                                                      */
+/* ------------------------------------------------------------------ */
+
 .app-shell {
   max-width: 1100px;
   margin: 0 auto;
   min-height: 100vh;
-  background: #f9fafb;
   padding: 24px;
 }
 
@@ -34,39 +57,47 @@ body {
 .title-block h1 {
   margin: 0;
   font-size: 2rem;
-  font-weight: 600;
+  font-weight: 700;
+  background: linear-gradient(120deg, var(--accent), var(--accent-alt));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .title-block .subtitle {
   margin: 4px 0 0;
   font-size: 0.95rem;
-  color: #4b5563;
+  color: var(--text-muted);
 }
 
 .auth-btn {
-  padding: 8px 16px;
+  padding: 8px 18px;
   border-radius: 999px;
   border: none;
-  background: #111827;
+  background: linear-gradient(135deg, var(--accent), var(--accent-deep));
   color: #f9fafb;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s ease, transform 0.08s ease;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.4);
+  transition: background 0.15s ease, transform 0.08s ease,
+    box-shadow 0.08s ease;
 }
 
 .auth-btn:hover {
-  background: #374151;
   transform: translateY(-1px);
+  box-shadow: 0 12px 24px rgba(37, 99, 235, 0.45);
 }
 
 main {
-  background: #ffffff;
-  border-radius: 24px;
+  background: var(--card-bg);
+  border-radius: 28px;
   padding: 24px 24px 40px;
-  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+  box-shadow: 0 24px 40px rgba(15, 23, 42, 0.14);
 }
 
-/* Views */
+/* ------------------------------------------------------------------ */
+/* Views                                                               */
+/* ------------------------------------------------------------------ */
 
 .view {
   display: none;
@@ -76,7 +107,9 @@ main {
   display: block;
 }
 
-/* Record section */
+/* ------------------------------------------------------------------ */
+/* Record section                                                      */
+/* ------------------------------------------------------------------ */
 
 .record-section {
   display: flex;
@@ -86,37 +119,46 @@ main {
 }
 
 .circle-btn {
-  width: 160px;
-  height: 160px;
+  width: 170px;
+  height: 170px;
   border-radius: 999px;
   border: none;
-  background: #111827;
+  background: radial-gradient(circle at 30% 30%, var(--accent-alt), var(--accent));
   color: #f9fafb;
   font-size: 1.5rem;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s ease, transform 0.08s ease, box-shadow 0.08s ease;
+  box-shadow: 0 18px 32px rgba(37, 99, 235, 0.35);
+  transition: transform 0.12s ease, box-shadow 0.12s ease,
+    filter 0.15s ease, background 0.15s ease;
 }
 
 .circle-btn:disabled {
-  background: #9ca3af;
+  background: linear-gradient(135deg, #9ca3af, #6b7280);
+  box-shadow: none;
   cursor: not-allowed;
 }
 
 .circle-btn.recording {
-  background: #b91c1c;
-  box-shadow: 0 0 0 6px rgba(248, 113, 113, 0.4);
+  background: radial-gradient(circle at 30% 30%, #f97373, var(--danger));
+  box-shadow: 0 18px 32px rgba(248, 113, 113, 0.45);
 }
 
 .circle-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
+  transform: translateY(-3px);
+  box-shadow: 0 22px 40px rgba(15, 23, 42, 0.45);
+  filter: brightness(1.03);
 }
 
 .record-status {
   margin-top: 10px;
   font-size: 0.95rem;
-  color: #6b7280;
+  color: var(--text-muted);
 }
+
+/* ------------------------------------------------------------------ */
+/* Common layout helpers                                               */
+/* ------------------------------------------------------------------ */
 
 .center-row {
   display: flex;
@@ -124,29 +166,78 @@ main {
   margin: 12px 0 4px;
 }
 
-/* Pills & recommendations */
+/* ------------------------------------------------------------------ */
+/* Buttons & pills                                                     */
+/* ------------------------------------------------------------------ */
 
 .pill-btn {
   padding: 10px 24px;
   border-radius: 999px;
   border: none;
-  background: #e5e7eb;
-  color: #111827;
+  background: var(--accent-soft);
+  color: var(--accent-deep);
   font-weight: 500;
   cursor: pointer;
   margin: 8px;
-  transition: background 0.15s ease, transform 0.08s ease;
+  box-shadow: 0 4px 10px rgba(148, 163, 184, 0.35);
+  transition: background 0.15s ease, transform 0.08s ease,
+    box-shadow 0.08s ease;
 }
 
 .pill-btn:hover {
-  background: #d1d5db;
+  background: #bfdbfe;
   transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(148, 163, 184, 0.45);
 }
 
 .pill-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+  box-shadow: none;
 }
+
+/* dark pill used for "View Analytics" */
+.primary-view-btn {
+  padding: 10px 24px;
+  border-radius: 999px;
+  border: none;
+  background: linear-gradient(135deg, var(--accent-deep), #020617);
+  color: #f9fafb;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.6);
+  transition: background 0.15s ease, transform 0.08s ease,
+    box-shadow 0.08s ease;
+}
+
+.primary-view-btn:hover {
+  background: linear-gradient(135deg, #020617, var(--accent-deep));
+  transform: translateY(-1px);
+  box-shadow: 0 14px 26px rgba(15, 23, 42, 0.7);
+}
+
+/* Past-walk table view button */
+.table-view-btn {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: none;
+  background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+  color: #f9fafb;
+  font-size: 0.85rem;
+  cursor: pointer;
+  box-shadow: 0 6px 12px rgba(37, 99, 235, 0.4);
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+
+.table-view-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 9px 18px rgba(37, 99, 235, 0.5);
+}
+
+/* ------------------------------------------------------------------ */
+/* Recommendations                                                     */
+/* ------------------------------------------------------------------ */
 
 .recommend-row {
   display: flex;
@@ -155,28 +246,32 @@ main {
   flex-wrap: wrap;
 }
 
-/* Single recommendation card */
-
 .recommend-section {
   margin-top: 16px;
 }
 
 .recommend-card {
-  background: #f3f4f6;
-  border-radius: 16px;
-  padding: 16px 20px;
+  background: linear-gradient(
+    135deg,
+    rgba(219, 234, 254, 0.9),
+    rgba(236, 253, 245, 0.9)
+  );
+  border-radius: 18px;
+  padding: 18px 22px;
   font-size: 0.95rem;
-  color: #111827;
+  color: var(--text-main);
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  box-shadow: 0 12px 28px rgba(148, 163, 184, 0.35);
 }
 
 .recommend-card-title {
-  font-weight: 600;
+  font-weight: 700;
   margin-bottom: 8px;
 }
 
 .rec-row {
   margin: 4px 0;
-  line-height: 1.5;
+  line-height: 1.55;
 }
 
 .rec-label {
@@ -185,11 +280,13 @@ main {
 
 .rec-divider {
   border: 0;
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px dashed rgba(148, 163, 184, 0.7);
   margin: 10px 0;
 }
 
-/* Past walks table */
+/* ------------------------------------------------------------------ */
+/* Past walks table                                                    */
+/* ------------------------------------------------------------------ */
 
 .past-walks {
   margin-top: 32px;
@@ -205,56 +302,35 @@ main {
   width: 100%;
   border-collapse: collapse;
   background: #f9fafb;
-  border-radius: 16px;
+  border-radius: 18px;
   overflow: hidden;
   font-size: 0.95rem;
+  box-shadow: 0 10px 24px rgba(148, 163, 184, 0.35);
 }
 
 .walks-table th,
 .walks-table td {
   padding: 10px 12px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--border-soft);
   text-align: center;
 }
 
 .walks-table thead {
-  background: #e5e7eb;
+  background: linear-gradient(90deg, var(--accent-soft), #e5f9f0);
   font-weight: 600;
 }
 
+.walks-table tbody tr:nth-child(even) {
+  background: #f3f4ff;
+}
+
 .walks-table tbody tr:hover {
-  background: #f3f4f6;
+  background: #e0f2fe;
 }
 
-.table-view-btn {
-  padding: 6px 12px;
-  border-radius: 999px;
-  border: none;
-  background: #111827;
-  color: #f9fafb;
-  font-size: 0.85rem;
-  cursor: pointer;
-}
-
-/* Dark pill used for "View Analytics" */
-.primary-view-btn {
-  padding: 10px 24px;
-  border-radius: 999px;
-  border: none;
-  background: #111827;
-  color: #f9fafb;
-  font-size: 0.95rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.15s ease, transform 0.08s ease;
-}
-
-.primary-view-btn:hover {
-  background: #374151;
-  transform: translateY(-1px);
-}
-
-/* Analytics view */
+/* ------------------------------------------------------------------ */
+/* Analytics view                                                      */
+/* ------------------------------------------------------------------ */
 
 .back-btn {
   border: none;
@@ -263,13 +339,17 @@ main {
   margin-bottom: 8px;
   cursor: pointer;
   font-size: 0.95rem;
-  color: #374151;
+  color: var(--accent-deep);
+}
+
+.back-btn:hover {
+  text-decoration: underline;
 }
 
 .analytics-subtitle {
   margin-top: 0;
   margin-bottom: 20px;
-  color: #6b7280;
+  color: var(--text-muted);
   font-size: 0.95rem;
 }
 
@@ -281,10 +361,11 @@ main {
 }
 
 .card {
-  background: #f9fafb;
+  background: var(--card-soft);
   border-radius: 20px;
   padding: 14px 16px;
-  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.06);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+  border: 1px solid rgba(209, 213, 219, 0.7);
 }
 
 .big-card {
@@ -298,7 +379,7 @@ main {
 
 .card-subtitle {
   font-size: 0.8rem;
-  color: #6b7280;
+  color: var(--text-muted);
 }
 
 .card-body {
@@ -310,6 +391,10 @@ main {
   margin-top: 10px;
   font-weight: 600;
 }
+
+/* ------------------------------------------------------------------ */
+/* Extra sections (charts, map, history)                              */
+/* ------------------------------------------------------------------ */
 
 .extra-charts {
   margin-top: 28px;
@@ -326,14 +411,15 @@ main {
   height: 260px;
   border-radius: 20px;
   overflow: hidden;
-  background: #e5e7eb;
+  background: #e0f2fe;
+  box-shadow: 0 14px 28px rgba(148, 163, 184, 0.45);
 }
 
 .route-map.map-empty {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #6b7280;
+  color: var(--text-muted);
   font-size: 0.9rem;
 }
 
@@ -347,7 +433,28 @@ main {
   margin-bottom: 20px;
 }
 
-/* Responsive */
+/* Chart wrappers */
+
+.chart-wrapper {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  height: 260px;
+  background: #eff6ff;
+  border-radius: 18px;
+  padding: 8px;
+  box-shadow: 0 10px 24px rgba(148, 163, 184, 0.35);
+}
+
+#historyScoreChart,
+#historyAvgChart {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* Responsive                                                          */
+/* ------------------------------------------------------------------ */
 
 @media (max-width: 900px) {
   .cards-grid {
@@ -356,6 +463,14 @@ main {
 
   .big-card {
     grid-row: span 1;
+  }
+
+  .chart-wrapper {
+    height: 220px;
+  }
+
+  .route-map {
+    height: 220px;
   }
 }
 
@@ -366,6 +481,7 @@ main {
 
   main {
     padding: 16px 16px 28px;
+    border-radius: 22px;
   }
 
   .top-header {
@@ -373,28 +489,9 @@ main {
     align-items: flex-start;
     gap: 8px;
   }
-}
 
-/* History charts sizing */
-.chart-wrapper {
-  position: relative;
-  width: 100%;
-  max-width: 100%;
-  height: 260px;
-}
-
-#historyScoreChart,
-#historyAvgChart {
-  width: 100% !important;
-  height: 100% !important;
-}
-
-@media (max-width: 900px) {
-  .chart-wrapper {
-    height: 220px;
-  }
-
-  .route-map {
-    height: 220px;
+  .circle-btn {
+    width: 150px;
+    height: 150px;
   }
 }
