@@ -1,12 +1,31 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
 import {
-  getAuth, signInAnonymously, onAuthStateChanged, setPersistence, browserLocalPersistence
+  getAuth,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signOut,
+  onAuthStateChanged,
+  setPersistence,
+  browserLocalPersistence,
 } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-auth.js";
 import {
-  getFirestore, doc, setDoc, collection, addDoc, serverTimestamp, Timestamp, updateDoc
+  getFirestore,
+  collection,
+  doc,
+  setDoc,
+  addDoc,
+  getDoc,
+  getDocs,
+  query,
+  orderBy,
+  updateDoc,
+  serverTimestamp,
+  Timestamp,
 } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js";
 
-//FIREBASE INIT
+// ---------------------------------------------------------------------------
+// FIREBASE INIT
+// ---------------------------------------------------------------------------
 const firebaseConfig = {
   apiKey: "AIzaSyAhw_Q8LwkTA_MhsCX-SsKST5zSA2wdwSo",
   authDomain: "walkguide-68d15.firebaseapp.com",
@@ -14,337 +33,1135 @@ const firebaseConfig = {
   storageBucket: "walkguide-68d15.firebasestorage.app",
   messagingSenderId: "873504166739",
   appId: "1:873504166739:web:6fbfe0970dad0dff45c7a6",
-  measurementId: "G-KKYHPNVW7J"
 };
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-await setPersistence(auth, browserLocalPersistence).catch(console.error);
+setPersistence(auth, browserLocalPersistence);
 const db = getFirestore(app);
 
-//DOM GETTERS
-const $ = id => document.getElementById(id);
+const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: "select_account" });
 
-const micEl      = $("micDisplay");
-const locEl      = $("locationDisplay");
-const accEl      = $("accuracyDisplay");
+// ---------------------------------------------------------------------------
+// DOM REFERENCES
+// ---------------------------------------------------------------------------
+const homeView = document.getElementById("homeView");
+const analyticsView = document.getElementById("analyticsView");
+const historyView = document.getElementById("historyView");
 
-const tempEl     = $("tempDisplay");
-const humEl      = $("humDisplay");
-const windEl     = $("windDisplay");
-const precipEl   = $("precipDisplay");
-const wxTimeEl   = $("weatherTime");
+const authButton = document.getElementById("authButton");
+const recordButton = document.getElementById("recordButton");
+const recordStatus = document.getElementById("recordStatus");
+const quickAnalyticsButton = document.getElementById("quickAnalyticsButton");
 
-const pm25El     = $("pm25Display");
-const pm10El     = $("pm10Display");
-const aqiEl      = $("aqiDisplay");
-const airTimeEl  = $("airTime");
+const todayRecButton = document.getElementById("todayRecButton");
+const tomorrowRecButton = document.getElementById("tomorrowRecButton");
+const todayRecOutput = document.getElementById("todayRecOutput");
+const tomorrowRecOutput = document.getElementById("tomorrowRecOutput");
 
-const startBtn   = $("start");
-const stopBtn    = $("stop");
-const statusEl   = $("status");
-const progressEl = $("progress");
+const walksTableBody = document.getElementById("walksTableBody");
+const historyAnalyticsButton = document.getElementById("historyAnalyticsButton");
 
-//HELPERS
-function clean(obj) {
-  if (Array.isArray(obj)) {
-    return obj.map(clean).filter(v => !(v == null || (typeof v === "number" && !Number.isFinite(v)) || v === ""));
+const backFromAnalytics = document.getElementById("backFromAnalytics");
+const backFromHistory = document.getElementById("backFromHistory");
+
+const analyticsTitle = document.getElementById("analyticsTitle");
+const analyticsSubtitle = document.getElementById("analyticsSubtitle");
+const locNameEl = document.getElementById("locName");
+const walkDurationEl = document.getElementById("walkDuration");
+const walkStartedAtEl = document.getElementById("walkStartedAt");
+const walkScoreTextEl = document.getElementById("walkScoreText");
+const avgTempEl = document.getElementById("avgTemp");
+const avgHumidityEl = document.getElementById("avgHumidity");
+const avgWindEl = document.getElementById("avgWind");
+const avgPrecipEl = document.getElementById("avgPrecip");
+const weatherScoreTextEl = document.getElementById("weatherScoreText");
+const avgPm25El = document.getElementById("avgPm25");
+const avgPm10El = document.getElementById("avgPm10");
+const avgAqiEl = document.getElementById("avgAqi");
+const airScoreTextEl = document.getElementById("airScoreText");
+
+const historySummaryText = document.getElementById("historySummaryText");
+
+const micCanvas = document.getElementById("micChart");
+const aqCanvas = document.getElementById("aqChart");
+const historyScoreCanvas = document.getElementById("historyScoreChart");
+const historyAvgCanvas = document.getElementById("historyAvgChart");
+
+// ---------------------------------------------------------------------------
+// GLOBAL STATE
+// ---------------------------------------------------------------------------
+let currentUser = null;
+let isRecording = false;
+
+let currentSessionRef = null;
+let currentAgg = null;
+let currentSessionStartedAt = null;
+let totalReadings = 0;
+let lastCompletedSessionId = null;
+let userSessionsCache = [];
+
+let lastPos = null;
+let geoWatchId = null;
+
+let audioContext = null;
+let micSource = null;
+let analyser = null;
+let micBuf = null;
+let micRafId = null;
+let sumDB = 0;
+let countDB = 0;
+
+let flushTimerId = null;
+let weatherTimerId = null;
+let airTimerId = null;
+
+const wxCache = {
+  weather: null,
+  air: null,
+};
+
+let micChart = null;
+let aqChart = null;
+let historyScoreChart = null;
+let historyAvgChart = null;
+
+// ---------------------------------------------------------------------------
+// VIEW HELPERS
+// ---------------------------------------------------------------------------
+function showView(viewId) {
+  for (const v of [homeView, analyticsView, historyView]) {
+    v.classList.remove("active");
   }
-  if (obj && typeof obj === "object") {
-    const o = {};
-    for (const [k, v] of Object.entries(obj)) {
-      const vv = clean(v);
-      if (!(vv == null || (typeof vv === "number" && !Number.isFinite(vv)) || vv === "")) o[k] = vv;
+  if (viewId === "home") homeView.classList.add("active");
+  if (viewId === "analytics") analyticsView.classList.add("active");
+  if (viewId === "history") historyView.classList.add("active");
+}
+
+// ---------------------------------------------------------------------------
+// AUTH
+// ---------------------------------------------------------------------------
+function updateAuthUI(user) {
+  if (!user) {
+    authButton.textContent = "Login / Signup";
+    authButton.title = "Not signed in";
+    recordButton.disabled = true;
+    recordStatus.textContent = "Please login to start.";
+  } else {
+    authButton.textContent = "Logout";
+    authButton.title = `Signed in as ${user.email || ""}`;
+    recordButton.disabled = false;
+    recordStatus.textContent = "Ready to record your next walk.";
+  }
+}
+
+authButton.addEventListener("click", async () => {
+  if (!currentUser) {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (err) {
+      console.error(err);
+      alert("Google sign-in failed. Please try again.");
     }
-    return o;
+  } else {
+    try {
+      await signOut(auth);
+    } catch (err) {
+      console.error(err);
+      alert("Sign-out failed. Please try again.");
+    }
   }
-  return obj;
+});
+
+onAuthStateChanged(auth, async (user) => {
+  currentUser = user;
+  updateAuthUI(user);
+
+  userSessionsCache = [];
+  walksTableBody.innerHTML = "";
+  lastCompletedSessionId = null;
+  quickAnalyticsButton.hidden = true;
+
+  if (user) {
+    await loadPastWalksForUser(user.uid);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GEOLOCATION
+// ---------------------------------------------------------------------------
+function getCurrentPositionOnce() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error("Geolocation not supported"));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude, accuracy } = pos.coords;
+        lastPos = { lat: latitude, lon: longitude, acc: accuracy };
+        resolve(lastPos);
+      },
+      (err) => reject(err),
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
+    );
+  });
 }
-const fmt  = (n, d) => Number.isFinite(n) ? Number(n).toFixed(d) : "--";
-const dbfs = rms => 20 * Math.log10(Math.max(rms, 1e-12));
 
-//delay (ms) until next boundary of minutesStep
-function delayToNextBoundary(minutesStep) {
-  const now = new Date();
-  const ms = now.getTime();
-
-  const stepMs = minutesStep * 60 * 1000;
-  //Using local clock boundary
-  const sinceEpoch = ms;
-  const next = Math.ceil(sinceEpoch / stepMs) * stepMs;
-  return Math.max(0, next - sinceEpoch);
+function startGpsWatch() {
+  if (!navigator.geolocation) return;
+  geoWatchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      const { latitude, longitude, accuracy } = pos.coords;
+      lastPos = { lat: latitude, lon: longitude, acc: accuracy };
+    },
+    (err) => console.warn("GPS watch error", err),
+    { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
+  );
 }
 
-// schedules a one-shot timeout aligned to the next boundary, then fixed-intervals after that
-function scheduleAligned(minutesStep, fn, holders) {
-  clearTimeout(holders.timeoutId);
-  clearInterval(holders.intervalId);
-
-  holders.timeoutId = setTimeout(async () => {
-    try { await fn(); } catch (e) { console.error(e); }
-    holders.intervalId = setInterval(async () => {
-      try { await fn(); } catch (e) { console.error(e); }
-    }, minutesStep * 60 * 1000);
-  }, delayToNextBoundary(minutesStep));
+function stopGpsWatch() {
+  if (geoWatchId != null) navigator.geolocation.clearWatch(geoWatchId);
+  geoWatchId = null;
 }
 
-//MIC STATE
+// ---------------------------------------------------------------------------
+// MICROPHONE
+// ---------------------------------------------------------------------------
 const MIC_WARMUP_MS = 1200;
 const MIN_DBFS = -100;
 const MAX_DBFS = 0;
 
-let micBuf = new Float32Array(2048);
-let stream, ctx, ana, src, raf;
-let micStartAt = 0;
-let sumDB = 0, countDB = 0, bucketStart = 0;
+function dbfs(rms) {
+  const v = Math.max(rms, 1e-12);
+  let d = 20 * Math.log10(v);
+  if (!Number.isFinite(d)) d = MIN_DBFS;
+  return Math.max(MIN_DBFS, Math.min(MAX_DBFS, d));
+}
 
-//GPS & WEATHER
-let gpsWatchId = null;
-let lastPos = null;
+async function startMic() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    throw new Error("Microphone not supported");
+  }
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  micSource = audioContext.createMediaStreamSource(stream);
+  analyser = audioContext.createAnalyser();
+  analyser.fftSize = 1024;
+  micBuf = new Float32Array(analyser.fftSize);
+  micSource.connect(analyser);
 
-const FLUSH_PERIOD_MS = 1000;
-let flushTimer = null;
-let logging = false;
+  sumDB = 0;
+  countDB = 0;
+  const startTime = performance.now();
 
-//cache with separate timestamps
-let wxCache = {
-  weather: null,        //Open-Meteo current
-  weatherFetchedAt: 0,  //ms
-  air: null,            //Open-Meteo Air current
-  airFetchedAt: 0       //ms
-};
+  function sampleMic() {
+    if (!analyser) return;
+    analyser.getFloatTimeDomainData(micBuf);
+    let s = 0;
+    for (let i = 0; i < micBuf.length; i++) s += micBuf[i] * micBuf[i];
+    const rms = Math.sqrt(s / micBuf.length);
+    const vdb = dbfs(rms);
 
-//aligned timers (timeout + interval pairs)
-const timers = {
-  wx: { timeoutId: null, intervalId: null },   //15 minutes boundaries
-  air: { timeoutId: null, intervalId: null }   //top-of-hour boundaries
-};
+    const now = performance.now();
+    if (now - startTime > MIC_WARMUP_MS) {
+      if (vdb >= MIN_DBFS && vdb <= MAX_DBFS) {
+        sumDB += vdb;
+        countDB += 1;
+      }
+    }
 
-//SESSION STORAGE
-let currentUID = null;
-let session = { id: null, startedAt: null, endedAt: null, totalReadings: 0 };
-let sessionDocRef = null;
-let readingsColRef = null;
-
-//AUTH
-signInAnonymously(auth).catch(console.error);
-onAuthStateChanged(auth, user => { currentUID = user ? user.uid : null; });
-
-//MICROPHONE SAMPLE LOOP
-function sampleMic() {
-  if (!ana) return;
-
-  ana.getFloatTimeDomainData(micBuf);
-  let s = 0;
-  for (let i = 0; i < micBuf.length; i++) s += micBuf[i] * micBuf[i];
-  const rms = Math.sqrt(s / micBuf.length);
-  const vdb = dbfs(rms);
-
-  micEl.textContent = `${fmt(vdb, 1)} dBFS`; 
-
-  const now = performance.now();
-  const warmed = (now - micStartAt) >= MIC_WARMUP_MS;
-  if (!bucketStart) bucketStart = now;
-
-  if (warmed && Number.isFinite(vdb) && vdb >= MIN_DBFS && vdb <= MAX_DBFS) {
-    sumDB += vdb;
-    countDB++;
+    micRafId = requestAnimationFrame(sampleMic);
   }
 
-  if (logging) raf = requestAnimationFrame(sampleMic);
+  micRafId = requestAnimationFrame(sampleMic);
 }
 
-//GPS HANDLING
-function startGPS() {
-  gpsWatchId = navigator.geolocation.watchPosition(pos => {
-    const { latitude, longitude, accuracy } = pos.coords;
-    lastPos = { lat: latitude, lon: longitude, acc: accuracy };
-    locEl.textContent = `${fmt(latitude, 6)}, ${fmt(longitude, 6)}`;
-    accEl.textContent = `${fmt(accuracy, 1)} m`;
-  }, err => {
-    locEl.textContent = "Location Error";
-    console.error(err);
-  }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
-}
-
-function stopGPS() {
-  if (gpsWatchId) {
-    navigator.geolocation.clearWatch(gpsWatchId);
-    gpsWatchId = null;
+function stopMic() {
+  if (micRafId != null) cancelAnimationFrame(micRafId);
+  micRafId = null;
+  if (micSource) {
+    try {
+      micSource.disconnect();
+    } catch {}
   }
+  if (audioContext) {
+    try {
+      audioContext.close();
+    } catch {}
+  }
+  analyser = null;
+  audioContext = null;
+  micSource = null;
+  micBuf = null;
 }
 
-function getCurrentPositionOnce() {
-  return new Promise((resolve, reject) =>
-    navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 })
-  );
-}
-
-//OPEN-METEO FETCHERS
+// ---------------------------------------------------------------------------
+// WEATHER + AIR (Open-Meteo current endpoints)
+// ---------------------------------------------------------------------------
 async function fetchWeather(lat, lon) {
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
-    `&current=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation,cloud_cover&timezone=auto`;
+    "&current=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation,cloud_cover&timezone=auto";
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`Weather fetch failed: ${res.status}`);
-  const json = await res.json();
-
-  wxCache.weather = json.current ?? null;
-  wxCache.weatherFetchedAt = Date.now();
-  //UI update
-  if (wxCache.weather) {
-    tempEl.textContent   = `${fmt(wxCache.weather.temperature_2m, 1)} °C`;
-    humEl.textContent    = `${fmt(wxCache.weather.relative_humidity_2m, 0)} %`;
-    windEl.textContent   = `${fmt(wxCache.weather.wind_speed_10m, 1)} m/s`;
-    precipEl.textContent = `${fmt(wxCache.weather.precipitation, 1)} mm`;
-    wxTimeEl.textContent = `Last update: ${wxCache.weather.time || "--"}`;
+  if (!res.ok) {
+    console.error("Weather fetch failed", res.status);
+    return;
   }
+  const json = await res.json();
+  wxCache.weather = json.current ?? null;
 }
 
 async function fetchAir(lat, lon) {
   const url =
     `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}` +
-    `&current=pm2_5,pm10,ozone,nitrogen_dioxide,sulphur_dioxide,european_aqi&timezone=auto`;
+    "&current=pm2_5,pm10,ozone,nitrogen_dioxide,sulphur_dioxide,european_aqi&timezone=auto";
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`Air fetch failed: ${res.status}`);
+  if (!res.ok) {
+    console.error("Air fetch failed", res.status);
+    return;
+  }
   const json = await res.json();
-
   wxCache.air = json.current ?? null;
-  wxCache.airFetchedAt = Date.now();
-  //UI update
-  if (wxCache.air) {
-    pm25El.textContent = `${fmt(wxCache.air.pm2_5, 1)} µg/m³`;
-    pm10El.textContent = `${fmt(wxCache.air.pm10, 1)} µg/m³`;
-    aqiEl.textContent   = `${fmt(wxCache.air.european_aqi, 0)}`;
-    airTimeEl.textContent = `Last update: ${wxCache.air.time || "--"}`;
+}
+
+// ---------------------------------------------------------------------------
+// SIMPLE HELPERS
+// ---------------------------------------------------------------------------
+function fmt(num, digits = 1) {
+  if (num === null || num === undefined || Number.isNaN(num)) return "--";
+  return Number(num).toFixed(digits);
+}
+
+function clean(obj) {
+  if (!obj || typeof obj !== "object") return obj;
+  const out = Array.isArray(obj) ? [] : {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v === null || v === undefined || Number.isNaN(v)) continue;
+    if (typeof v === "object" && !(v instanceof Timestamp)) out[k] = clean(v);
+    else out[k] = v;
+  }
+  return out;
+}
+
+// Reverse geocode for nice location name
+async function reverseGeocode(lat, lon) {
+  const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}`;
+  try {
+    const res = await fetch(url, {
+      headers: { "Accept-Language": "en" },
+    });
+    if (!res.ok) throw new Error("Reverse geocode failed");
+    const data = await res.json();
+    const addr = data.address || {};
+    const { city, town, village, suburb, state, country } = addr;
+    const place = city || town || village || suburb || state || "Unknown place";
+    return `${place}, ${country || ""}`.trim();
+  } catch (err) {
+    console.warn("Reverse geocode error", err);
+    return "Unknown place";
   }
 }
 
-//ALIGNED REFRESH LOOPS
-// starts the aligned refreshers (15-minute weather, hourly air)
-function startAlignedRefreshers() {
-  if (!lastPos) return;
-  scheduleAligned(15, () => fetchWeather(lastPos.lat, lastPos.lon), timers.wx);
-  scheduleAligned(60, () => fetchAir(lastPos.lat, lastPos.lon), timers.air);
+// ---------------------------------------------------------------------------
+// AGGREGATOR & SCORING
+// ---------------------------------------------------------------------------
+function resetAggregator() {
+  currentAgg = {
+    startTs: null,
+    endTs: null,
+    count: 0,
+    noiseSum: 0,
+    tempSum: 0,
+    humiditySum: 0,
+    windSum: 0,
+    precipSum: 0,
+    pm25Sum: 0,
+    pm10Sum: 0,
+    aqiSum: 0,
+  };
 }
 
-function stopAlignedRefreshers() {
-  clearTimeout(timers.wx.timeoutId);   clearInterval(timers.wx.intervalId);
-  clearTimeout(timers.air.timeoutId);  clearInterval(timers.air.intervalId);
-  timers.wx.timeoutId = timers.wx.intervalId = null;
-  timers.air.timeoutId = timers.air.intervalId = null;
+function scoreNoise(avgDbfs) {
+  const QUIET = -80;
+  const LOUD = -25;
+  if (!Number.isFinite(avgDbfs)) return 50;
+  const clamped = Math.min(LOUD, Math.max(QUIET, avgDbfs));
+  const t = (clamped - LOUD) / (QUIET - LOUD); // 0 loud, 1 quiet
+  return Math.round(t * 100);
 }
 
-//DATA SAVE PER SECOND
+function scoreWeather(tempC, humidityPct, windMs, precipMm) {
+  let tempScore;
+  if (!Number.isFinite(tempC)) tempScore = 50;
+  else if (tempC <= 0 || tempC >= 35) tempScore = 0;
+  else if (tempC >= 15 && tempC <= 22) tempScore = 100;
+  else if (tempC < 15) tempScore = ((tempC - 0) / (15 - 0)) * 100;
+  else tempScore = ((35 - tempC) / (35 - 22)) * 100;
+
+  let humScore;
+  if (!Number.isFinite(humidityPct)) humScore = 50;
+  else if (humidityPct <= 20 || humidityPct >= 90) humScore = 0;
+  else if (humidityPct >= 40 && humidityPct <= 60) humScore = 100;
+  else if (humidityPct < 40)
+    humScore = ((humidityPct - 20) / (40 - 20)) * 100;
+  else humScore = ((90 - humidityPct) / (90 - 60)) * 100;
+
+  let windScore;
+  if (!Number.isFinite(windMs)) windScore = 50;
+  else if (windMs >= 12) windScore = 0;
+  else if (windMs >= 1 && windMs <= 5) windScore = 100;
+  else if (windMs < 1) windScore = windMs * 100;
+  else windScore = ((12 - windMs) / (12 - 5)) * 100;
+
+  let rainScore;
+  if (!Number.isFinite(precipMm)) rainScore = 50;
+  else if (precipMm === 0) rainScore = 100;
+  else if (precipMm >= 4) rainScore = 0;
+  else rainScore = ((4 - precipMm) / 4) * 100;
+
+  return Math.round(
+    0.5 * tempScore + 0.2 * humScore + 0.2 * windScore + 0.1 * rainScore
+  );
+}
+
+function scoreAir(pm25, pm10, aqi) {
+  let pm25Score;
+  if (!Number.isFinite(pm25)) pm25Score = 50;
+  else if (pm25 <= 5) pm25Score = 100;
+  else if (pm25 >= 50) pm25Score = 0;
+  else pm25Score = ((50 - pm25) / (50 - 5)) * 100;
+
+  let pm10Score;
+  if (!Number.isFinite(pm10)) pm10Score = 50;
+  else if (pm10 <= 15) pm10Score = 100;
+  else if (pm10 >= 100) pm10Score = 0;
+  else pm10Score = ((100 - pm10) / (100 - 15)) * 100;
+
+  let aqiScore;
+  if (!Number.isFinite(aqi)) aqiScore = 50;
+  else {
+    const clamped = Math.min(5, Math.max(1, aqi));
+    aqiScore = 100 - (clamped - 1) * 25;
+  }
+
+  return Math.round(0.4 * pm25Score + 0.3 * pm10Score + 0.3 * aqiScore);
+}
+
+function computeWalkSummary(agg) {
+  if (!agg || agg.count === 0) return null;
+
+  const durationMin = (agg.endTs - agg.startTs) / 1000 / 60;
+
+  const avgNoiseDbfs = agg.noiseSum / agg.count;
+  const avgTempC = agg.tempSum / agg.count;
+  const avgHumidity = agg.humiditySum / agg.count;
+  const avgWind = agg.windSum / agg.count;
+  const avgPrecip = agg.precipSum / agg.count;
+  const avgPm25 = agg.pm25Sum / agg.count;
+  const avgPm10 = agg.pm10Sum / agg.count;
+  const avgAqi = agg.aqiSum / agg.count;
+
+  const noiseScore = scoreNoise(avgNoiseDbfs);
+  const weatherScore = scoreWeather(
+    avgTempC,
+    avgHumidity,
+    avgWind,
+    avgPrecip
+  );
+  const airScore = scoreAir(avgPm25, avgPm10, avgAqi);
+
+  const walkScore = Math.round(
+    0.4 * noiseScore + 0.3 * weatherScore + 0.3 * airScore
+  );
+
+  return {
+    durationMin,
+    avgNoiseDbfs,
+    avgTempC,
+    avgHumidity,
+    avgWind,
+    avgPrecip,
+    avgPm25,
+    avgPm10,
+    avgAqi,
+    noiseScore,
+    weatherScore,
+    airScore,
+    walkScore,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// RECORD / STOP LOGIC
+// ---------------------------------------------------------------------------
+recordButton.addEventListener("click", () => {
+  if (!isRecording) startRecording();
+  else stopRecording();
+});
+
+async function startRecording() {
+  if (!currentUser) {
+    alert("Please login first.");
+    return;
+  }
+  if (isRecording) return;
+
+  isRecording = true;
+  recordButton.textContent = "Stop";
+  recordButton.classList.add("recording");
+  recordStatus.textContent = "Preparing sensors…";
+  quickAnalyticsButton.hidden = true;
+  lastCompletedSessionId = null;
+
+  try {
+    // 1. GPS fix
+    await getCurrentPositionOnce();
+
+    // 2. Weather & air initial
+    await Promise.all([
+      fetchWeather(lastPos.lat, lastPos.lon),
+      fetchAir(lastPos.lat, lastPos.lon),
+    ]);
+
+    // 3. Firestore session doc
+    const sessionsCol = collection(db, "users", currentUser.uid, "sessions");
+    const sessionDoc = doc(sessionsCol);
+    currentSessionRef = sessionDoc;
+    currentSessionStartedAt = Date.now();
+    totalReadings = 0;
+
+    // Location name (fire and forget)
+    const locNamePromise = reverseGeocode(lastPos.lat, lastPos.lon);
+
+    await setDoc(sessionDoc, {
+      startedAt: serverTimestamp(),
+      status: "running",
+    });
+
+    // 4. Start mic + GPS + timers
+    resetAggregator();
+    currentAgg.startTs = Date.now();
+    await startMic();
+    startGpsWatch();
+
+    flushTimerId = setInterval(flushOneSecond, 1000);
+    weatherTimerId = setInterval(
+      () => fetchWeather(lastPos.lat, lastPos.lon),
+      15 * 60 * 1000
+    );
+    airTimerId = setInterval(
+      () => fetchAir(lastPos.lat, lastPos.lon),
+      60 * 60 * 1000
+    );
+
+    // update session with location name once ready
+    locNamePromise.then((name) => {
+      updateDoc(sessionDoc, { locationName: name }).catch(console.error);
+    });
+
+    recordStatus.textContent = "Recording… Tap Stop when your walk is done.";
+  } catch (err) {
+    console.error("Start recording failed", err);
+    alert("Could not start sensors. Please check permissions.");
+    await stopRecording(true);
+  }
+}
+
+async function stopRecording(isError = false) {
+  if (!isRecording) return;
+  isRecording = false;
+  recordButton.textContent = "Record";
+  recordButton.classList.remove("recording");
+
+  clearInterval(flushTimerId);
+  clearInterval(weatherTimerId);
+  clearInterval(airTimerId);
+  flushTimerId = weatherTimerId = airTimerId = null;
+
+  stopMic();
+  stopGpsWatch();
+
+  if (!currentSessionRef || !currentAgg) {
+    recordStatus.textContent = "Stopped.";
+    return;
+  }
+
+  currentAgg.endTs = Date.now();
+  const summary = computeWalkSummary(currentAgg);
+
+  try {
+    await updateDoc(currentSessionRef, {
+      endedAt: serverTimestamp(),
+      status: isError ? "error" : "completed",
+      totalReadings: totalReadings,
+      summary: clean(summary),
+    });
+  } catch (err) {
+    console.error("Failed to update session summary", err);
+  }
+
+  if (!isError) {
+    recordStatus.textContent = "Walk saved. View analytics for details.";
+    lastCompletedSessionId = currentSessionRef.id;
+    quickAnalyticsButton.hidden = false;
+    await loadPastWalksForUser(currentUser.uid); // refresh table
+  } else {
+    recordStatus.textContent = "Recording stopped due to an error.";
+  }
+
+  currentSessionRef = null;
+  currentAgg = null;
+}
+
+// Flush once per second to Firestore
 async function flushOneSecond() {
-  //Need: valid mic bucket, gps fix, weather snapshot, air snapshot, session doc
-  if (!countDB || !lastPos || !wxCache.weather || !wxCache.air || !sessionDocRef) return;
+  if (!currentSessionRef) return;
+  if (!countDB || !lastPos || !wxCache.weather || !wxCache.air) return;
 
   const avgDB = sumDB / countDB;
-  sumDB = 0; countDB = 0;
+  sumDB = 0;
+  countDB = 0;
 
-  await addDoc(readingsColRef, clean({
+  const reading = {
     ts: Timestamp.fromDate(new Date()),
     lat: lastPos.lat,
     lon: lastPos.lon,
     accuracy_m: lastPos.acc,
     sound_dbfs: avgDB,
     weather: wxCache.weather,
-    air: wxCache.air
-  }));
-  session.totalReadings++;
-  progressEl.textContent = `Saved ${session.totalReadings} readings…`;
-}
+    air: wxCache.air,
+  };
 
-//START
-async function start() {
-  if (!currentUID) return (progressEl.textContent = "Signing in…");
-  if (!navigator.geolocation) return (progressEl.textContent = "GPS Not Available");
-
-  session = { id: null, startedAt: new Date(), endedAt: null, totalReadings: 0 };
-
-  const sessionsCol = collection(db, "users", currentUID, "sessions");
-  sessionDocRef = doc(sessionsCol);
-  readingsColRef = collection(sessionDocRef, "readings");
-
-  await setDoc(sessionDocRef, clean({
-    startedAt: Timestamp.fromDate(session.startedAt),
-    samplePeriodMs: FLUSH_PERIOD_MS,
-    weatherAligned: "every 15 min (:00/:15/:30/:45)",
-    airAligned: "hourly (:00)",
-    device: { userAgent: navigator.userAgent, platform: navigator.platform },
-    createdAt: serverTimestamp()
-  }));
-
-  //Initial GPS fix
-  progressEl.textContent = "Getting GPS Fix…";
-  const first = await getCurrentPositionOnce();
-  lastPos = { lat: first.coords.latitude, lon: first.coords.longitude, acc: first.coords.accuracy };
-  locEl.textContent = `${fmt(lastPos.lat,6)}, ${fmt(lastPos.lon,6)}`;
-  accEl.textContent = `${fmt(lastPos.acc,1)} m`;
-
-  //Initial weather + air
-  progressEl.textContent = "Fetching Weather & Air…";
   try {
-    await Promise.all([ fetchWeather(lastPos.lat, lastPos.lon), fetchAir(lastPos.lat, lastPos.lon) ]);
-  } catch (e) {
-    console.error(e);
+    await addDoc(
+      collection(currentSessionRef, "readings"),
+      clean(reading)
+    );
+    totalReadings += 1;
+  } catch (err) {
+    console.error("Failed to write reading", err);
   }
 
-  //Start aligned refreshers
-  startAlignedRefreshers();
+  // aggregator updates
+  currentAgg.count += 1;
+  currentAgg.noiseSum += avgDB;
 
-  //Start GPS watch + mic + per-second flush
-  startGPS();
-
-  stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  ctx = new (window.AudioContext || window.webkitAudioContext)();
-  ana = ctx.createAnalyser(); ana.fftSize = 2048;
-  src = ctx.createMediaStreamSource(stream); src.connect(ana);
-  micStartAt = performance.now();
-
-  logging = true;
-  sampleMic();
-  flushTimer = setInterval(flushOneSecond, FLUSH_PERIOD_MS);
-
-  statusEl.textContent = "Running…";
-  statusEl.classList.remove("stopped"); statusEl.classList.add("running");
-  startBtn.disabled = true; stopBtn.disabled = false;
-  progressEl.textContent = `Session started (${sessionDocRef.id})`;
+  const w = wxCache.weather;
+  const a = wxCache.air;
+  if (w) {
+    currentAgg.tempSum += w.temperature_2m ?? 0;
+    currentAgg.humiditySum += w.relative_humidity_2m ?? 0;
+    currentAgg.windSum += w.wind_speed_10m ?? 0;
+    currentAgg.precipSum += w.precipitation ?? 0;
+  }
+  if (a) {
+    currentAgg.pm25Sum += a.pm2_5 ?? 0;
+    currentAgg.pm10Sum += a.pm10 ?? 0;
+    currentAgg.aqiSum += a.european_aqi ?? 0;
+  }
 }
 
-//STOP
-async function stop() {
-  logging = false;
+// ---------------------------------------------------------------------------
+// PAST WALKS TABLE
+// ---------------------------------------------------------------------------
+async function loadPastWalksForUser(uid) {
+  const sessionsCol = collection(db, "users", uid, "sessions");
+  const q = query(sessionsCol, orderBy("startedAt", "desc"));
+  const snap = await getDocs(q);
 
-  if (raf) cancelAnimationFrame(raf);
-  if (flushTimer) { clearInterval(flushTimer); flushTimer = null; }
-  stopAlignedRefreshers();
-  stopGPS();
+  userSessionsCache = [];
+  walksTableBody.innerHTML = "";
 
-  try { src && src.disconnect(); } catch {}
-  try { ctx && ctx.close(); } catch {}
-  try { stream && stream.getTracks().forEach(t => t.stop()); } catch {}
+  let i = 1;
+  snap.forEach((docSnap) => {
+    const data = docSnap.data();
+    userSessionsCache.push({ id: docSnap.id, data });
 
-  //one last flush if possible
-  await flushOneSecond();
+    const tr = document.createElement("tr");
 
-  session.endedAt = new Date();
-  await updateDoc(sessionDocRef, clean({
-    endedAt: Timestamp.fromDate(session.endedAt),
-    totalReadings: session.totalReadings,
-    updatedAt: serverTimestamp()
-  }));
+    const idxTd = document.createElement("td");
+    idxTd.textContent = String(i++);
+    tr.appendChild(idxTd);
 
-  startBtn.disabled = false;
-  stopBtn.disabled = true;
-  statusEl.textContent = "Stopped";
-  statusEl.classList.remove("running"); statusEl.classList.add("stopped");
-  progressEl.textContent = `Session complete (${session.totalReadings} readings).`;
+    const startedAt = data.startedAt
+      ? data.startedAt.toDate()
+      : null;
+    const dateTd = document.createElement("td");
+    dateTd.textContent = startedAt
+      ? startedAt.toLocaleString()
+      : "--";
+    tr.appendChild(dateTd);
 
-  //reset cache
-  wxCache = { weather: null, weatherFetchedAt: 0, air: null, airFetchedAt: 0 };
+    const locTd = document.createElement("td");
+    locTd.textContent = data.locationName || "--";
+    tr.appendChild(locTd);
+
+    const scoreTd = document.createElement("td");
+    const score =
+      data.summary && typeof data.summary.walkScore === "number"
+        ? `${data.summary.walkScore}%`
+        : "--";
+    scoreTd.textContent = score;
+    tr.appendChild(scoreTd);
+
+    const detailTd = document.createElement("td");
+    const btn = document.createElement("button");
+    btn.textContent = "View";
+    btn.className = "table-view-btn";
+    btn.addEventListener("click", () =>
+      openAnalyticsForSession(docSnap.id)
+    );
+    detailTd.appendChild(btn);
+    tr.appendChild(detailTd);
+
+    walksTableBody.appendChild(tr);
+  });
 }
 
-startBtn.addEventListener("click", start);
-stopBtn.addEventListener("click", stop);
+// ---------------------------------------------------------------------------
+// PER-WALK ANALYTICS (Chart.js + summary)
+// ---------------------------------------------------------------------------
+async function openAnalyticsForSession(sessionId) {
+  if (!currentUser) return;
+
+  const sessionRef = doc(
+    db,
+    "users",
+    currentUser.uid,
+    "sessions",
+    sessionId
+  );
+  const sessionSnap = await getDoc(sessionRef);
+  if (!sessionSnap.exists()) {
+    alert("Session not found.");
+    return;
+  }
+
+  const data = sessionSnap.data();
+  const startedAt = data.startedAt ? data.startedAt.toDate() : null;
+  const endedAt = data.endedAt ? data.endedAt.toDate() : null;
+  const summary = data.summary || {};
+
+  analyticsTitle.textContent = "Walk Analytics";
+  analyticsSubtitle.textContent = startedAt
+    ? `Walk on ${startedAt.toLocaleString()}`
+    : "";
+
+  locNameEl.textContent = `Location: ${data.locationName || "--"}`;
+  walkDurationEl.textContent = summary.durationMin
+    ? `Duration: ${summary.durationMin.toFixed(1)} min`
+    : "Duration: --";
+  walkStartedAtEl.textContent = startedAt
+    ? `Started: ${startedAt.toLocaleTimeString()}`
+    : "Started: --";
+
+  if (summary.walkScore != null) {
+    walkScoreTextEl.textContent = `Walk Score: ${summary.walkScore}%`;
+    const s = summary.walkScore;
+    const label =
+      s >= 80 ? "Excellent" : s >= 60 ? "Good" : s >= 40 ? "OK" : "Poor";
+    walkScoreTextEl.textContent += ` (${label})`;
+  } else {
+    walkScoreTextEl.textContent = "Walk Score: --";
+  }
+
+  avgTempEl.textContent = `Temperature: ${fmt(
+    summary.avgTempC,
+    1
+  )} °C`;
+  avgHumidityEl.textContent = `Humidity: ${fmt(
+    summary.avgHumidity,
+    0
+  )} %`;
+  avgWindEl.textContent = `Wind: ${fmt(summary.avgWind, 1)} m/s`;
+  avgPrecipEl.textContent = `Precipitation: ${fmt(
+    summary.avgPrecip,
+    1
+  )} mm`;
+  weatherScoreTextEl.textContent =
+    summary.weatherScore != null
+      ? `Weather Score: ${summary.weatherScore}%`
+      : "Weather Score: --";
+
+  avgPm25El.textContent = `PM2.5: ${fmt(summary.avgPm25, 1)} µg/m³`;
+  avgPm10El.textContent = `PM10: ${fmt(summary.avgPm10, 1)} µg/m³`;
+  avgAqiEl.textContent = `EU AQI: ${fmt(summary.avgAqi, 0)}`;
+  airScoreTextEl.textContent =
+    summary.airScore != null
+      ? `Air Score: ${summary.airScore}%`
+      : "Air Score: --";
+
+  // Load readings for charts
+  const readingsSnap = await getDocs(
+    query(
+      collection(sessionRef, "readings"),
+      orderBy("ts", "asc")
+    )
+  );
+
+  const labels = [];
+  const noiseSeries = [];
+  const pm25Series = [];
+  const pm10Series = [];
+  const aqiSeries = [];
+
+  readingsSnap.forEach((rSnap) => {
+    const r = rSnap.data();
+    const ts = r.ts ? r.ts.toDate() : null;
+    labels.push(
+      ts ? ts.toLocaleTimeString([], { hour12: false }) : ""
+    );
+    noiseSeries.push(r.sound_dbfs ?? null);
+    const air = r.air || {};
+    pm25Series.push(air.pm2_5 ?? null);
+    pm10Series.push(air.pm10 ?? null);
+    aqiSeries.push(air.european_aqi ?? null);
+  });
+
+  if (micChart) micChart.destroy();
+  micChart = new Chart(micCanvas.getContext("2d"), {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Noise (dBFS)",
+          data: noiseSeries,
+          borderWidth: 2,
+          tension: 0.25,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        y: {
+          title: { display: true, text: "dBFS (lower is quieter)" },
+        },
+      },
+    },
+  });
+
+  if (aqChart) aqChart.destroy();
+  aqChart = new Chart(aqCanvas.getContext("2d"), {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "PM2.5 (µg/m³)",
+          data: pm25Series,
+          borderWidth: 2,
+          tension: 0.25,
+        },
+        {
+          label: "PM10 (µg/m³)",
+          data: pm10Series,
+          borderWidth: 2,
+          tension: 0.25,
+        },
+        {
+          label: "EU AQI",
+          data: aqiSeries,
+          borderWidth: 2,
+          tension: 0.25,
+          yAxisID: "y1",
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        y: {
+          position: "left",
+          title: { display: true, text: "PM (µg/m³)" },
+        },
+        y1: {
+          position: "right",
+          grid: { drawOnChartArea: false },
+          title: { display: true, text: "EU AQI" },
+        },
+      },
+    },
+  });
+
+  showView("analytics");
+}
+
+backFromAnalytics.addEventListener("click", () => {
+  showView("home");
+});
+
+// Quick analytics button for last recorded walk
+quickAnalyticsButton.addEventListener("click", () => {
+  if (lastCompletedSessionId) openAnalyticsForSession(lastCompletedSessionId);
+});
+
+// ---------------------------------------------------------------------------
+// HISTORY ANALYTICS
+// ---------------------------------------------------------------------------
+historyAnalyticsButton.addEventListener("click", () => {
+  renderHistoryAnalytics();
+  showView("history");
+});
+
+backFromHistory.addEventListener("click", () => {
+  showView("home");
+});
+
+function renderHistoryAnalytics() {
+  const sessions = userSessionsCache.filter(
+    (s) => s.data.summary && typeof s.data.summary.walkScore === "number"
+  );
+  if (!sessions.length) {
+    historySummaryText.textContent =
+      "No completed walks yet. Go for a walk and record it!";
+    if (historyScoreChart) historyScoreChart.destroy();
+    if (historyAvgChart) historyAvgChart.destroy();
+    return;
+  }
+
+  const labels = [];
+  const scores = [];
+  let noiseSum = 0,
+    weatherSum = 0,
+    airSum = 0;
+
+  sessions
+    .slice()
+    .sort((a, b) => {
+      const da = a.data.startedAt?.toMillis?.() || 0;
+      const db = b.data.startedAt?.toMillis?.() || 0;
+      return da - db;
+    })
+    .forEach((s) => {
+      const d = s.data;
+      const startedAt = d.startedAt ? d.startedAt.toDate() : null;
+      labels.push(
+        startedAt
+          ? startedAt.toLocaleDateString() +
+              " " +
+              startedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+          : s.id
+      );
+
+      const sum = d.summary;
+      scores.push(sum.walkScore);
+      noiseSum += sum.noiseScore ?? 0;
+      weatherSum += sum.weatherScore ?? 0;
+      airSum += sum.airScore ?? 0;
+    });
+
+  const n = sessions.length;
+  const avgNoise = noiseSum / n;
+  const avgWeather = weatherSum / n;
+  const avgAir = airSum / n;
+
+  historySummaryText.textContent = `You have recorded ${n} walk${
+    n === 1 ? "" : "s"
+  }. Your average walk score is ${(
+    scores.reduce((a, b) => a + b, 0) / n
+  ).toFixed(1)}%.`;
+
+  if (historyScoreChart) historyScoreChart.destroy();
+  historyScoreChart = new Chart(
+    historyScoreCanvas.getContext("2d"),
+    {
+      type: "line",
+      data: {
+        labels,
+        datasets: [
+          {
+            label: "Walk Score (%)",
+            data: scores,
+            borderWidth: 2,
+            tension: 0.25,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: {
+            min: 0,
+            max: 100,
+            title: { display: true, text: "Score (%)" },
+          },
+        },
+      },
+    }
+  );
+
+  if (historyAvgChart) historyAvgChart.destroy();
+  historyAvgChart = new Chart(
+    historyAvgCanvas.getContext("2d"),
+    {
+      type: "bar",
+      data: {
+        labels: ["Noise", "Weather", "Air"],
+        datasets: [
+          {
+            label: "Average Score (%)",
+            data: [avgNoise, avgWeather, avgAir],
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: {
+            min: 0,
+            max: 100,
+          },
+        },
+      },
+    }
+  );
+}
+
+// ---------------------------------------------------------------------------
+// RECOMMENDATIONS – BEST TIME TODAY / TOMORROW
+// ---------------------------------------------------------------------------
+todayRecButton.addEventListener("click", () => {
+  computeRecommendations("today");
+});
+tomorrowRecButton.addEventListener("click", () => {
+  computeRecommendations("tomorrow");
+});
+
+async function fetchHourlyForecast(lat, lon) {
+  const base = `latitude=${lat}&longitude=${lon}&timezone=auto`;
+
+  const weatherUrl =
+    `https://api.open-meteo.com/v1/forecast?${base}` +
+    "&hourly=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation&forecast_days=2";
+
+  const airUrl =
+    `https://air-quality-api.open-meteo.com/v1/air-quality?${base}` +
+    "&hourly=pm2_5,pm10,european_aqi&forecast_days=2";
+
+  const [wRes, aRes] = await Promise.all([
+    fetch(weatherUrl),
+    fetch(airUrl),
+  ]);
+  const weather = await wRes.json();
+  const air = await aRes.json();
+  return { weather, air };
+}
+
+function buildHourlyScores(forecast) {
+  const { weather, air } = forecast;
+  const times = weather.hourly.time;
+  const scores = [];
+
+  for (let i = 0; i < times.length; i++) {
+    const temp = weather.hourly.temperature_2m[i];
+    const hum = weather.hourly.relative_humidity_2m[i];
+    const wind = weather.hourly.wind_speed_10m[i];
+    const precip = weather.hourly.precipitation[i];
+
+    const pm25 = air.hourly.pm2_5[i];
+    const pm10 = air.hourly.pm10[i];
+    const aqi = air.hourly.european_aqi[i];
+
+    const weatherScore = scoreWeather(temp, hum, wind, precip);
+    const airScore = scoreAir(pm25, pm10, aqi);
+    const walkScore = Math.round(0.5 * weatherScore + 0.5 * airScore);
+
+    scores.push({
+      timeIso: times[i],
+      walkScore,
+      weatherScore,
+      airScore,
+      temp,
+      hum,
+      wind,
+      precip,
+      pm25,
+      pm10,
+      aqi,
+    });
+  }
+  return scores;
+}
+
+function bestSlotForDate(hourlyScores, dateStr) {
+  const filtered = hourlyScores.filter((h) => {
+    const d = h.timeIso.slice(0, 10);
+    const hour = new Date(h.timeIso).getHours();
+    return d === dateStr && hour >= 5 && hour <= 22;
+  });
+  if (!filtered.length) return null;
+  filtered.sort((a, b) => b.walkScore - a.walkScore);
+  return filtered[0];
+}
+
+async function computeRecommendations(which) {
+  if (!lastPos) {
+    try {
+      await getCurrentPositionOnce();
+    } catch {
+      alert("Need location permission for recommendations.");
+      return;
+    }
+  }
+
+  try {
+    const forecast = await fetchHourlyForecast(lastPos.lat, lastPos.lon);
+    const hourlyScores = buildHourlyScores(forecast);
+
+    const today = new Date();
+    const todayStr = today.toISOString().slice(0, 10);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+    const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+
+    const todayBest = bestSlotForDate(hourlyScores, todayStr);
+    const tomorrowBest = bestSlotForDate(hourlyScores, tomorrowStr);
+
+    if (which === "today") {
+      renderRecommendation(todayBest, todayRecOutput, "today");
+    } else {
+      renderRecommendation(tomorrowBest, tomorrowRecOutput, "tomorrow");
+    }
+  } catch (err) {
+    console.error("Recommendation error", err);
+    alert("Could not fetch forecast. Try again later.");
+  }
+}
+
+function renderRecommendation(best, container, label) {
+  if (!best) {
+    container.textContent = `No suitable time found for ${label}.`;
+    return;
+  }
+  const dt = new Date(best.timeIso);
+  const timeStr = dt.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  container.innerHTML = `
+    <strong>Best time ${label}:</strong> ${timeStr}<br>
+    Walk score: ${best.walkScore}% (Weather ${best.weatherScore}%, Air ${best.airScore}%)<br>
+    Temp ${fmt(best.temp, 1)} °C, Humidity ${fmt(best.hum, 0)} %, Wind ${fmt(
+    best.wind,
+    1
+  )} m/s<br>
+    PM2.5 ${fmt(best.pm25, 1)} µg/m³, PM10 ${fmt(best.pm10, 1)} µg/m³, EU AQI ${fmt(
+    best.aqi,
+    0
+  )}
+  `;
+}
+
+// ---------------------------------------------------------------------------
+// INITIAL STATE
+// ---------------------------------------------------------------------------
+showView("home");
+recordStatus.textContent = "Please login to start.";

@@ -1,59 +1,165 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Sensor Logger</title>
-<link rel="stylesheet" href="styles.css" />
+  <meta charset="utf-8" />
+  <title>Walk Guide</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="styles.css" />
 </head>
-
 <body>
+  <div class="app-shell">
+    <header class="top-header">
+      <div class="title-block">
+        <h1>Walk Guide</h1>
+        <p class="subtitle">Your personal walk companion</p>
+      </div>
+      <button id="authButton" class="auth-btn" title="Not signed in">
+        Login / Signup
+      </button>
+    </header>
 
-<header>
-  <h1>Sensor Logger</h1>
-  <p class="subtitle">GPS • Microphone • Weather • Air Quality</p>
-</header>
+    <main>
+      <!-- HOME VIEW -------------------------------------------------------->
+      <section id="homeView" class="view active">
+        <div class="record-section">
+          <button id="recordButton" class="circle-btn" disabled>
+            Record
+          </button>
+          <div id="recordStatus" class="record-status">
+            Please login to start.
+          </div>
+        </div>
 
-<div class="controls">
-  <button id="start">Start</button>
-  <button id="stop" disabled>Stop</button>
-  <span id="status" class="status stopped">Stopped</span>
-</div>
+        <div class="center-row">
+          <button id="quickAnalyticsButton" class="pill-btn" hidden>
+            View Analytics
+          </button>
+        </div>
 
-<div class="grid">
+        <div class="recommend-row">
+          <button id="todayRecButton" class="pill-btn">
+            Today’s Recommendation
+          </button>
+          <button id="tomorrowRecButton" class="pill-btn">
+            Tomorrow’s Recommendation
+          </button>
+        </div>
 
-  <div class="card">
-    <h2>Microphone</h2>
-    <div class="row"><label>Mic Level:</label> <span id="micDisplay">-- dBFS</span></div>
+        <div class="recommend-output">
+          <div id="todayRecOutput" class="rec-card"></div>
+          <div id="tomorrowRecOutput" class="rec-card"></div>
+        </div>
+
+        <section class="past-walks">
+          <h2>Past Walks</h2>
+          <table class="walks-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Date &amp; Time</th>
+                <th>Location</th>
+                <th>Walk Score</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody id="walksTableBody">
+              <!-- rows injected -->
+            </tbody>
+          </table>
+        </section>
+
+        <div class="center-row">
+          <button id="historyAnalyticsButton" class="pill-btn">
+            View Whole History Analytics
+          </button>
+        </div>
+      </section>
+
+      <!-- PER-WALK ANALYTICS VIEW ----------------------------------------->
+      <section id="analyticsView" class="view">
+        <button class="back-btn" id="backFromAnalytics">← Back to Home</button>
+        <h2 id="analyticsTitle">Walk Analytics</h2>
+        <p id="analyticsSubtitle" class="analytics-subtitle"></p>
+
+        <div class="cards-grid">
+          <article class="card big-card">
+            <header class="card-header">
+              <h3>Microphone</h3>
+              <span class="card-subtitle">Noise during your walk</span>
+            </header>
+            <div class="card-body">
+              <canvas id="micChart"></canvas>
+            </div>
+          </article>
+
+          <article class="card">
+            <header class="card-header">
+              <h3>Location</h3>
+            </header>
+            <div class="card-body">
+              <p id="locName">Location: --</p>
+              <p id="walkDuration">Duration: --</p>
+              <p id="walkStartedAt">Started: --</p>
+              <p id="walkScoreText" class="walk-score-text">
+                Walk Score: --
+              </p>
+            </div>
+          </article>
+
+          <article class="card">
+            <header class="card-header">
+              <h3>Weather</h3>
+            </header>
+            <div class="card-body">
+              <p id="avgTemp">Temperature: --</p>
+              <p id="avgHumidity">Humidity: --</p>
+              <p id="avgWind">Wind: --</p>
+              <p id="avgPrecip">Precipitation: --</p>
+              <p id="weatherScoreText">Weather Score: --</p>
+            </div>
+          </article>
+
+          <article class="card">
+            <header class="card-header">
+              <h3>Air Quality</h3>
+            </header>
+            <div class="card-body">
+              <p id="avgPm25">PM2.5: --</p>
+              <p id="avgPm10">PM10: --</p>
+              <p id="avgAqi">EU AQI: --</p>
+              <p id="airScoreText">Air Score: --</p>
+            </div>
+          </article>
+        </div>
+
+        <section class="extra-charts">
+          <h3>Air Quality During Walk</h3>
+          <canvas id="aqChart"></canvas>
+        </section>
+      </section>
+
+      <!-- HISTORY ANALYTICS VIEW ------------------------------------------>
+      <section id="historyView" class="view">
+        <button class="back-btn" id="backFromHistory">← Back to Home</button>
+        <h2>Your Walking History</h2>
+        <p id="historySummaryText" class="analytics-subtitle"></p>
+
+        <section class="extra-charts">
+          <h3>Walk Scores Over Time</h3>
+          <canvas id="historyScoreChart"></canvas>
+        </section>
+
+        <section class="extra-charts">
+          <h3>Average Scores Across All Walks</h3>
+          <canvas id="historyAvgChart"></canvas>
+        </section>
+      </section>
+    </main>
   </div>
 
-  <div class="card">
-    <h2>Location</h2>
-    <div class="row"><label>Lat, Lon:</label> <span id="locationDisplay">-- , --</span></div>
-    <div class="row"><label>Accuracy:</label> <span id="accuracyDisplay">-- m</span></div>
-  </div>
-
-  <div class="card">
-    <h2>Weather (Open-Meteo)</h2>
-    <div class="row"><label>Temperature:</label> <span id="tempDisplay">-- °C</span></div>
-    <div class="row"><label>Humidity:</label> <span id="humDisplay">-- %</span></div>
-    <div class="row"><label>Wind Speed:</label> <span id="windDisplay">-- m/s</span></div>
-    <div class="row"><label>Precipitation:</label> <span id="precipDisplay">-- mm</span></div>
-    <small id="weatherTime">Last update: --</small>
-  </div>
-
-  <div class="card">
-    <h2>Air Quality (Open-Meteo)</h2>
-    <div class="row"><label>PM2.5:</label> <span id="pm25Display">-- µg/m³</span></div>
-    <div class="row"><label>PM10:</label> <span id="pm10Display">-- µg/m³</span></div>
-    <div class="row"><label>EU AQI:</label> <span id="aqiDisplay">--</span></div>
-    <small id="airTime">Last update: --</small>
-  </div>
-
-</div>
-
-<div id="progress" class="footer-status">Preparing…</div>
-
-<script type="module" src="./app.js"></script>
+  <!-- Chart.js global -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Your app logic -->
+  <script type="module" src="app.js"></script>
 </body>
 </html>
