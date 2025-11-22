@@ -295,9 +295,20 @@ onAuthStateChanged(auth, async (user) => {
   quickAnalyticsButton.hidden = true;
 
   if (user) {
+    // Logged in: load their sessions
     await loadPastWalksForUser(user.uid);
+  } else {
+    // Logged out: always send back to Home
+    showView("home");
+
+    // Hide any open recommendation card
+    if (recommendationSection) {
+      recommendationSection.classList.add("hidden");
+    }
+    currentRecMode = null;
   }
 });
+
 
 // ---------------------------------------------------------------------------
 // GEOLOCATION
@@ -1061,7 +1072,14 @@ function updateRouteMap(points) {
   const mapContainer = document.getElementById("routeMap");
   if (!mapContainer || typeof L === "undefined") return;
 
+  // No GPS points for this walk
   if (!points || points.length === 0) {
+    // If a map already exists, remove it completely
+    if (routeMap) {
+      routeMap.remove();      // destroys Leaflet instance & DOM
+      routeMap = null;
+      routeLayers = [];
+    }
     mapContainer.classList.add("map-empty");
     mapContainer.innerHTML = "Not enough location data for this walk.";
     return;
@@ -1069,19 +1087,24 @@ function updateRouteMap(points) {
 
   const latLngs = points.map((p) => [p.lat, p.lon]);
 
-  mapContainer.classList.remove("map-empty");
-  mapContainer.innerHTML = "";
-
+  // First-time initialisation
   if (!routeMap) {
-    routeMap = L.map("routeMap");
+    mapContainer.classList.remove("map-empty");
+    mapContainer.innerHTML = "";                 // clear placeholder ONCE
+
+    // Create Leaflet map bound to the existing DOM element
+    routeMap = L.map(mapContainer);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
       attribution:
         '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     }).addTo(routeMap);
+  } else {
+    // Reusing existing map – just ensure placeholder styles are gone
+    mapContainer.classList.remove("map-empty");
   }
 
-  // Clear previous layers
+  // Remove previous route layers
   routeLayers.forEach((layer) => {
     try {
       routeMap.removeLayer(layer);
@@ -1089,13 +1112,14 @@ function updateRouteMap(points) {
   });
   routeLayers = [];
 
-  // Draw colour-coded segments by noise
+  // Draw colour-coded segments by noise (same logic as before)
   if (latLngs.length >= 2) {
     for (let i = 0; i < points.length - 1; i++) {
       const p1 = points[i];
       const p2 = points[i + 1];
       const n1 = p1.noise;
       const n2 = p2.noise;
+
       let avgNoise = null;
       if (Number.isFinite(n1) && Number.isFinite(n2)) {
         avgNoise = (n1 + n2) / 2;
@@ -1119,20 +1143,20 @@ function updateRouteMap(points) {
     }
   }
 
-  // Start & end markers
+  // Start / end markers
   const startMarker = L.circleMarker(latLngs[0], { radius: 5 }).addTo(routeMap);
   const endMarker = L.circleMarker(latLngs[latLngs.length - 1], {
     radius: 5,
   }).addTo(routeMap);
   routeLayers.push(startMarker, endMarker);
 
+  // Fit view to route and fix size
   routeMap.fitBounds(L.latLngBounds(latLngs), { padding: [16, 16] });
-
-  // Fix sizing when view is switched
   setTimeout(() => {
     routeMap.invalidateSize();
   }, 0);
 }
+
 
 // ---------------------------------------------------------------------------
 // RECOMMENDATIONS – BEST TIME TODAY / TOMORROW
