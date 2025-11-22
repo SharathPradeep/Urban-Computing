@@ -87,7 +87,6 @@ const airScoreTextEl = document.getElementById("airScoreText");
 const historySummaryText = document.getElementById("historySummaryText");
 
 const micCanvas = document.getElementById("micChart");
-const aqCanvas = document.getElementById("aqChart");
 const historyScoreCanvas = document.getElementById("historyScoreChart");
 const historyAvgCanvas = document.getElementById("historyAvgChart");
 
@@ -124,7 +123,6 @@ const wxCache = {
 };
 
 let micChart = null;
-let aqChart = null;
 let historyScoreChart = null;
 let historyAvgChart = null;
 
@@ -179,13 +177,6 @@ function clean(obj) {
   return out;
 }
 
-function qualityLabel(score) {
-  if (!Number.isFinite(score)) return "--";
-  if (score >= 80) return "excellent";
-  if (score >= 60) return "good";
-  if (score >= 40) return "okay";
-  return "poor";
-}
 
 function formatTimeShort(iso) {
   const d = new Date(iso);
@@ -841,9 +832,6 @@ async function openAnalyticsForSession(sessionId) {
 
   const labels = [];
   const noiseSeries = [];
-  const pm25Series = [];
-  const pm10Series = [];
-  const aqiSeries = [];
 
   readingsSnap.forEach((rSnap) => {
     const r = rSnap.data();
@@ -852,10 +840,6 @@ async function openAnalyticsForSession(sessionId) {
       ts ? ts.toLocaleTimeString([], { hour12: false }) : ""
     );
     noiseSeries.push(r.sound_dbfs ?? null);
-    const air = r.air || {};
-    pm25Series.push(air.pm2_5 ?? null);
-    pm10Series.push(air.pm10 ?? null);
-    aqiSeries.push(air.european_aqi ?? null);
   });
 
   if (micChart) micChart.destroy();
@@ -878,50 +862,6 @@ async function openAnalyticsForSession(sessionId) {
       scales: {
         y: {
           title: { display: true, text: "dBFS (lower is quieter)" },
-        },
-      },
-    },
-  });
-
-  if (aqChart) aqChart.destroy();
-  aqChart = new Chart(aqCanvas.getContext("2d"), {
-    type: "line",
-    data: {
-      labels,
-      datasets: [
-        {
-          label: "PM2.5 (µg/m³)",
-          data: pm25Series,
-          borderWidth: 2,
-          tension: 0.25,
-        },
-        {
-          label: "PM10 (µg/m³)",
-          data: pm10Series,
-          borderWidth: 2,
-          tension: 0.25,
-        },
-        {
-          label: "EU AQI",
-          data: aqiSeries,
-          borderWidth: 2,
-          tension: 0.25,
-          yAxisID: "y1",
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      scales: {
-        y: {
-          position: "left",
-          title: { display: true, text: "PM (µg/m³)" },
-        },
-        y1: {
-          position: "right",
-          grid: { drawOnChartArea: false },
-          title: { display: true, text: "EU AQI" },
         },
       },
     },
@@ -1223,16 +1163,12 @@ function renderRecommendationToday(bestOverall, bestRemaining) {
   }
 
   const tOverall = formatTimeShort(bestOverall.timeIso);
-  const labelOverall = qualityLabel(bestOverall.walkScore);
-  const labelWeatherOverall = qualityLabel(bestOverall.weatherScore);
-  const labelAirOverall = qualityLabel(bestOverall.airScore);
 
   let html = `
     <div class="recommend-card-title">Today’s Recommendation</div>
     <div class="rec-row">
       <span class="rec-label">Best time today:</span>
       <span> ${tOverall}</span>
-      <span class="rec-tag">${labelOverall}</span>
     </div>
     <div class="rec-row">
       <span class="rec-label">Predicted walk score:</span>
@@ -1245,7 +1181,6 @@ function renderRecommendationToday(bestOverall, bestRemaining) {
         Humidity ${fmt(bestOverall.hum, 0)} %,
         Wind ${fmt(bestOverall.wind, 1)} m/s
       </span>
-      <span class="rec-tag">${labelWeatherOverall}</span>
     </div>
     <div class="rec-row">
       <span class="rec-label">Air quality:</span>
@@ -1254,25 +1189,18 @@ function renderRecommendationToday(bestOverall, bestRemaining) {
         PM10 ${fmt(bestOverall.pm10, 1)} µg/m³,
         EU AQI ${fmt(bestOverall.aqi, 0)}
       </span>
-      <span class="rec-tag">${labelAirOverall}</span>
     </div>
   `;
 
-  if (
-    bestRemaining &&
-    bestRemaining.timeIso !== bestOverall.timeIso
-  ) {
+  // If best overall time is in the past, also show "best for rest of today"
+  if (bestRemaining && bestRemaining.timeIso !== bestOverall.timeIso) {
     const tRem = formatTimeShort(bestRemaining.timeIso);
-    const labelRem = qualityLabel(bestRemaining.walkScore);
-    const labelWeatherRem = qualityLabel(bestRemaining.weatherScore);
-    const labelAirRem = qualityLabel(bestRemaining.airScore);
 
     html += `
       <hr class="rec-divider">
       <div class="rec-row">
         <span class="rec-label">Best time for the rest of today:</span>
         <span> ${tRem}</span>
-        <span class="rec-tag">${labelRem}</span>
       </div>
       <div class="rec-row">
         <span class="rec-label">Predicted walk score:</span>
@@ -1285,7 +1213,6 @@ function renderRecommendationToday(bestOverall, bestRemaining) {
           Humidity ${fmt(bestRemaining.hum, 0)} %,
           Wind ${fmt(bestRemaining.wind, 1)} m/s
         </span>
-        <span class="rec-tag">${labelWeatherRem}</span>
       </div>
       <div class="rec-row">
         <span class="rec-label">Air quality:</span>
@@ -1294,13 +1221,13 @@ function renderRecommendationToday(bestOverall, bestRemaining) {
           PM10 ${fmt(bestRemaining.pm10, 1)} µg/m³,
           EU AQI ${fmt(bestRemaining.aqi, 0)}
         </span>
-        <span class="rec-tag">${labelAirRem}</span>
       </div>
     `;
   }
 
   recommendCard.innerHTML = html;
 }
+
 
 function renderRecommendationTomorrow(best) {
   if (!recommendCard) return;
@@ -1311,16 +1238,12 @@ function renderRecommendationTomorrow(best) {
   }
 
   const t = formatTimeShort(best.timeIso);
-  const labelOverall = qualityLabel(best.walkScore);
-  const labelWeather = qualityLabel(best.weatherScore);
-  const labelAir = qualityLabel(best.airScore);
 
   const html = `
     <div class="recommend-card-title">Tomorrow’s Recommendation</div>
     <div class="rec-row">
       <span class="rec-label">Best time tomorrow:</span>
       <span> ${t}</span>
-      <span class="rec-tag">${labelOverall}</span>
     </div>
     <div class="rec-row">
       <span class="rec-label">Predicted walk score:</span>
@@ -1333,7 +1256,6 @@ function renderRecommendationTomorrow(best) {
         Humidity ${fmt(best.hum, 0)} %,
         Wind ${fmt(best.wind, 1)} m/s
       </span>
-      <span class="rec-tag">${labelWeather}</span>
     </div>
     <div class="rec-row">
       <span class="rec-label">Air quality:</span>
@@ -1342,12 +1264,12 @@ function renderRecommendationTomorrow(best) {
         PM10 ${fmt(best.pm10, 1)} µg/m³,
         EU AQI ${fmt(best.aqi, 0)}
       </span>
-      <span class="rec-tag">${labelAir}</span>
     </div>
   `;
 
   recommendCard.innerHTML = html;
 }
+
 
 // ---------------------------------------------------------------------------
 // INITIAL STATE
