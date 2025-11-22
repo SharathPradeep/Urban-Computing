@@ -63,6 +63,10 @@ const tomorrowRecOutput = document.getElementById("tomorrowRecOutput");
 const walksTableBody = document.getElementById("walksTableBody");
 const historyAnalyticsButton = document.getElementById("historyAnalyticsButton");
 
+const recommendRow = document.getElementById("recommendRow");
+const recommendOutput = document.getElementById("recommendOutput");
+const pastWalksSection = document.getElementById("pastWalksSection");
+
 const backFromAnalytics = document.getElementById("backFromAnalytics");
 const backFromHistory = document.getElementById("backFromHistory");
 
@@ -148,13 +152,32 @@ function updateAuthUI(user) {
     authButton.title = "Not signed in";
     recordButton.disabled = true;
     recordStatus.textContent = "Please login to start.";
+
+    // Hide things when logged out
+    if (recommendRow) recommendRow.classList.add("hidden");
+    if (recommendOutput) recommendOutput.classList.add("hidden");
+    if (pastWalksSection) pastWalksSection.classList.add("hidden");
+    if (historyAnalyticsButton) historyAnalyticsButton.classList.add("hidden");
+
+    // Clear any shown data
+    todayRecOutput.textContent = "";
+    tomorrowRecOutput.textContent = "";
+    walksTableBody.innerHTML = "";
+    quickAnalyticsButton.hidden = true;
   } else {
     authButton.textContent = "Logout";
     authButton.title = `Signed in as ${user.email || ""}`;
     recordButton.disabled = false;
     recordStatus.textContent = "Ready to record your next walk.";
+
+    // Show things when logged in
+    if (recommendRow) recommendRow.classList.remove("hidden");
+    if (recommendOutput) recommendOutput.classList.remove("hidden");
+    if (pastWalksSection) pastWalksSection.classList.remove("hidden");
+    if (historyAnalyticsButton) historyAnalyticsButton.classList.remove("hidden");
   }
 }
+
 
 authButton.addEventListener("click", async () => {
   if (!currentUser) {

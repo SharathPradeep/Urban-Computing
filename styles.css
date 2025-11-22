@@ -319,3 +319,7 @@ main {
     gap: 8px;
   }
 }
+
+.hidden {
+  display: none !important;
+}
