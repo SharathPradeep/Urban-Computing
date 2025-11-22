@@ -55,17 +55,15 @@ const recordButton = document.getElementById("recordButton");
 const recordStatus = document.getElementById("recordStatus");
 const quickAnalyticsButton = document.getElementById("quickAnalyticsButton");
 
+const recommendRow = document.getElementById("recommendRow");
+const recommendationSection = document.getElementById("recommendationSection");
+const recommendCard = document.getElementById("recommendCard");
 const todayRecButton = document.getElementById("todayRecButton");
 const tomorrowRecButton = document.getElementById("tomorrowRecButton");
-const todayRecOutput = document.getElementById("todayRecOutput");
-const tomorrowRecOutput = document.getElementById("tomorrowRecOutput");
 
+const pastWalksSection = document.getElementById("pastWalksSection");
 const walksTableBody = document.getElementById("walksTableBody");
 const historyAnalyticsButton = document.getElementById("historyAnalyticsButton");
-
-const recommendRow = document.getElementById("recommendRow");
-const recommendOutput = document.getElementById("recommendOutput");
-const pastWalksSection = document.getElementById("pastWalksSection");
 
 const backFromAnalytics = document.getElementById("backFromAnalytics");
 const backFromHistory = document.getElementById("backFromHistory");
@@ -101,7 +99,6 @@ let isRecording = false;
 
 let currentSessionRef = null;
 let currentAgg = null;
-let currentSessionStartedAt = null;
 let totalReadings = 0;
 let lastCompletedSessionId = null;
 let userSessionsCache = [];
@@ -131,6 +128,8 @@ let aqChart = null;
 let historyScoreChart = null;
 let historyAvgChart = null;
 
+let currentRecMode = null; // "today" | "tomorrow" | null
+
 // ---------------------------------------------------------------------------
 // VIEW HELPERS
 // ---------------------------------------------------------------------------
@@ -144,6 +143,75 @@ function showView(viewId) {
 }
 
 // ---------------------------------------------------------------------------
+// GENERIC HELPERS
+// ---------------------------------------------------------------------------
+function fmt(num, digits = 1) {
+  if (num === null || num === undefined || Number.isNaN(num)) return "--";
+  return Number(num).toFixed(digits);
+}
+
+// Convert various Firestore timestamp formats -> JS Date or null
+function toJsDateMaybe(value) {
+  if (!value) return null;
+  if (typeof value.toDate === "function") return value.toDate();
+  if (typeof value.seconds === "number")
+    return new Date(value.seconds * 1000);
+  if (value instanceof Date) return value;
+  if (typeof value === "number") {
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  if (typeof value === "string") {
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  return null;
+}
+
+function clean(obj) {
+  if (!obj || typeof obj !== "object") return obj;
+  const out = Array.isArray(obj) ? [] : {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v === null || v === undefined || Number.isNaN(v)) continue;
+    if (typeof v === "object" && !(v instanceof Timestamp)) out[k] = clean(v);
+    else out[k] = v;
+  }
+  return out;
+}
+
+function qualityLabel(score) {
+  if (!Number.isFinite(score)) return "--";
+  if (score >= 80) return "excellent";
+  if (score >= 60) return "good";
+  if (score >= 40) return "okay";
+  return "poor";
+}
+
+function formatTimeShort(iso) {
+  const d = new Date(iso);
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+// Reverse geocode for nice location name
+async function reverseGeocode(lat, lon) {
+  const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}`;
+  try {
+    const res = await fetch(url, {
+      headers: { "Accept-Language": "en" },
+    });
+    if (!res.ok) throw new Error("Reverse geocode failed");
+    const data = await res.json();
+    const addr = data.address || {};
+    const { city, town, village, suburb, state, country } = addr;
+    const place = city || town || village || suburb || state || "Unknown place";
+    return `${place}, ${country || ""}`.trim();
+  } catch (err) {
+    console.warn("Reverse geocode error", err);
+    return "Unknown place";
+  }
+}
+
+// ---------------------------------------------------------------------------
 // AUTH
 // ---------------------------------------------------------------------------
 function updateAuthUI(user) {
@@ -153,15 +221,15 @@ function updateAuthUI(user) {
     recordButton.disabled = true;
     recordStatus.textContent = "Please login to start.";
 
-    // Hide things when logged out
     if (recommendRow) recommendRow.classList.add("hidden");
-    if (recommendOutput) recommendOutput.classList.add("hidden");
-    if (pastWalksSection) pastWalksSection.classList.add("hidden");
-    if (historyAnalyticsButton) historyAnalyticsButton.classList.add("hidden");
+    if (recommendationSection) recommendationSection.classList.add("hidden");
+    if (recommendCard) recommendCard.innerHTML = "";
+    currentRecMode = null;
 
-    // Clear any shown data
-    todayRecOutput.textContent = "";
-    tomorrowRecOutput.textContent = "";
+    if (pastWalksSection) pastWalksSection.classList.add("hidden");
+    if (historyAnalyticsButton)
+      historyAnalyticsButton.classList.add("hidden");
+
     walksTableBody.innerHTML = "";
     quickAnalyticsButton.hidden = true;
   } else {
@@ -170,14 +238,13 @@ function updateAuthUI(user) {
     recordButton.disabled = false;
     recordStatus.textContent = "Ready to record your next walk.";
 
-    // Show things when logged in
     if (recommendRow) recommendRow.classList.remove("hidden");
-    if (recommendOutput) recommendOutput.classList.remove("hidden");
+    // keep recommendationSection hidden until user clicks a button
     if (pastWalksSection) pastWalksSection.classList.remove("hidden");
-    if (historyAnalyticsButton) historyAnalyticsButton.classList.remove("hidden");
+    if (historyAnalyticsButton)
+      historyAnalyticsButton.classList.remove("hidden");
   }
 }
-
 
 authButton.addEventListener("click", async () => {
   if (!currentUser) {
@@ -350,44 +417,6 @@ async function fetchAir(lat, lon) {
 }
 
 // ---------------------------------------------------------------------------
-// SIMPLE HELPERS
-// ---------------------------------------------------------------------------
-function fmt(num, digits = 1) {
-  if (num === null || num === undefined || Number.isNaN(num)) return "--";
-  return Number(num).toFixed(digits);
-}
-
-function clean(obj) {
-  if (!obj || typeof obj !== "object") return obj;
-  const out = Array.isArray(obj) ? [] : {};
-  for (const [k, v] of Object.entries(obj)) {
-    if (v === null || v === undefined || Number.isNaN(v)) continue;
-    if (typeof v === "object" && !(v instanceof Timestamp)) out[k] = clean(v);
-    else out[k] = v;
-  }
-  return out;
-}
-
-// Reverse geocode for nice location name
-async function reverseGeocode(lat, lon) {
-  const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}`;
-  try {
-    const res = await fetch(url, {
-      headers: { "Accept-Language": "en" },
-    });
-    if (!res.ok) throw new Error("Reverse geocode failed");
-    const data = await res.json();
-    const addr = data.address || {};
-    const { city, town, village, suburb, state, country } = addr;
-    const place = city || town || village || suburb || state || "Unknown place";
-    return `${place}, ${country || ""}`.trim();
-  } catch (err) {
-    console.warn("Reverse geocode error", err);
-    return "Unknown place";
-  }
-}
-
-// ---------------------------------------------------------------------------
 // AGGREGATOR & SCORING
 // ---------------------------------------------------------------------------
 function resetAggregator() {
@@ -539,23 +568,17 @@ async function startRecording() {
   lastCompletedSessionId = null;
 
   try {
-    // 1. GPS fix
     await getCurrentPositionOnce();
-
-    // 2. Weather & air initial
     await Promise.all([
       fetchWeather(lastPos.lat, lastPos.lon),
       fetchAir(lastPos.lat, lastPos.lon),
     ]);
 
-    // 3. Firestore session doc
     const sessionsCol = collection(db, "users", currentUser.uid, "sessions");
     const sessionDoc = doc(sessionsCol);
     currentSessionRef = sessionDoc;
-    currentSessionStartedAt = Date.now();
     totalReadings = 0;
 
-    // Location name (fire and forget)
     const locNamePromise = reverseGeocode(lastPos.lat, lastPos.lon);
 
     await setDoc(sessionDoc, {
@@ -563,7 +586,6 @@ async function startRecording() {
       status: "running",
     });
 
-    // 4. Start mic + GPS + timers
     resetAggregator();
     currentAgg.startTs = Date.now();
     await startMic();
@@ -579,7 +601,6 @@ async function startRecording() {
       60 * 60 * 1000
     );
 
-    // update session with location name once ready
     locNamePromise.then((name) => {
       updateDoc(sessionDoc, { locationName: name }).catch(console.error);
     });
@@ -629,7 +650,7 @@ async function stopRecording(isError = false) {
     recordStatus.textContent = "Walk saved. View analytics for details.";
     lastCompletedSessionId = currentSessionRef.id;
     quickAnalyticsButton.hidden = false;
-    await loadPastWalksForUser(currentUser.uid); // refresh table
+    await loadPastWalksForUser(currentUser.uid);
   } else {
     recordStatus.textContent = "Recording stopped due to an error.";
   }
@@ -667,7 +688,6 @@ async function flushOneSecond() {
     console.error("Failed to write reading", err);
   }
 
-  // aggregator updates
   currentAgg.count += 1;
   currentAgg.noiseSum += avgDB;
 
@@ -708,9 +728,7 @@ async function loadPastWalksForUser(uid) {
     idxTd.textContent = String(i++);
     tr.appendChild(idxTd);
 
-    const startedAt = data.startedAt
-      ? data.startedAt.toDate()
-      : null;
+    const startedAt = toJsDateMaybe(data.startedAt);
     const dateTd = document.createElement("td");
     dateTd.textContent = startedAt
       ? startedAt.toLocaleString()
@@ -763,8 +781,7 @@ async function openAnalyticsForSession(sessionId) {
   }
 
   const data = sessionSnap.data();
-  const startedAt = data.startedAt ? data.startedAt.toDate() : null;
-  const endedAt = data.endedAt ? data.endedAt.toDate() : null;
+  const startedAt = toJsDateMaybe(data.startedAt);
   const summary = data.summary || {};
 
   analyticsTitle.textContent = "Walk Analytics";
@@ -781,11 +798,10 @@ async function openAnalyticsForSession(sessionId) {
     : "Started: --";
 
   if (summary.walkScore != null) {
-    walkScoreTextEl.textContent = `Walk Score: ${summary.walkScore}%`;
     const s = summary.walkScore;
     const label =
       s >= 80 ? "Excellent" : s >= 60 ? "Good" : s >= 40 ? "OK" : "Poor";
-    walkScoreTextEl.textContent += ` (${label})`;
+    walkScoreTextEl.textContent = `Walk Score: ${summary.walkScore}% (${label})`;
   } else {
     walkScoreTextEl.textContent = "Walk Score: --";
   }
@@ -816,7 +832,6 @@ async function openAnalyticsForSession(sessionId) {
       ? `Air Score: ${summary.airScore}%`
       : "Air Score: --";
 
-  // Load readings for charts
   const readingsSnap = await getDocs(
     query(
       collection(sessionRef, "readings"),
@@ -832,7 +847,7 @@ async function openAnalyticsForSession(sessionId) {
 
   readingsSnap.forEach((rSnap) => {
     const r = rSnap.data();
-    const ts = r.ts ? r.ts.toDate() : null;
+    const ts = r.ts ? toJsDateMaybe(r.ts) : null;
     labels.push(
       ts ? ts.toLocaleTimeString([], { hour12: false }) : ""
     );
@@ -919,7 +934,6 @@ backFromAnalytics.addEventListener("click", () => {
   showView("home");
 });
 
-// Quick analytics button for last recorded walk
 quickAnalyticsButton.addEventListener("click", () => {
   if (lastCompletedSessionId) openAnalyticsForSession(lastCompletedSessionId);
 });
@@ -957,18 +971,21 @@ function renderHistoryAnalytics() {
   sessions
     .slice()
     .sort((a, b) => {
-      const da = a.data.startedAt?.toMillis?.() || 0;
-      const db = b.data.startedAt?.toMillis?.() || 0;
+      const da = toJsDateMaybe(a.data.startedAt)?.getTime() || 0;
+      const db = toJsDateMaybe(b.data.startedAt)?.getTime() || 0;
       return da - db;
     })
     .forEach((s) => {
       const d = s.data;
-      const startedAt = d.startedAt ? d.startedAt.toDate() : null;
+      const startedAt = toJsDateMaybe(d.startedAt);
       labels.push(
         startedAt
           ? startedAt.toLocaleDateString() +
               " " +
-              startedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+              startedAt.toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              })
           : s.id
       );
 
@@ -1052,11 +1069,27 @@ function renderHistoryAnalytics() {
 // RECOMMENDATIONS – BEST TIME TODAY / TOMORROW
 // ---------------------------------------------------------------------------
 todayRecButton.addEventListener("click", () => {
-  computeRecommendations("today");
+  toggleRecommendation("today");
 });
 tomorrowRecButton.addEventListener("click", () => {
-  computeRecommendations("tomorrow");
+  toggleRecommendation("tomorrow");
 });
+
+async function toggleRecommendation(which) {
+  if (!recommendationSection) return;
+
+  // Clicking the same button again hides the card
+  if (
+    currentRecMode === which &&
+    !recommendationSection.classList.contains("hidden")
+  ) {
+    recommendationSection.classList.add("hidden");
+    currentRecMode = null;
+    return;
+  }
+
+  await computeRecommendations(which);
+}
 
 async function fetchHourlyForecast(lat, lon) {
   const base = `latitude=${lat}&longitude=${lon}&timezone=auto`;
@@ -1125,6 +1158,23 @@ function bestSlotForDate(hourlyScores, dateStr) {
   return filtered[0];
 }
 
+function bestSlotFromNowToday(hourlyScores, now) {
+  const todayStr = now.toISOString().slice(0, 10);
+  const nowMs = now.getTime();
+
+  const filtered = hourlyScores.filter((h) => {
+    const d = h.timeIso.slice(0, 10);
+    if (d !== todayStr) return false;
+    const ts = new Date(h.timeIso).getTime();
+    const hour = new Date(h.timeIso).getHours();
+    return ts >= nowMs && hour >= 5 && hour <= 22;
+  });
+
+  if (!filtered.length) return null;
+  filtered.sort((a, b) => b.walkScore - a.walkScore);
+  return filtered[0];
+}
+
 async function computeRecommendations(which) {
   if (!lastPos) {
     try {
@@ -1139,48 +1189,164 @@ async function computeRecommendations(which) {
     const forecast = await fetchHourlyForecast(lastPos.lat, lastPos.lon);
     const hourlyScores = buildHourlyScores(forecast);
 
-    const today = new Date();
-    const todayStr = today.toISOString().slice(0, 10);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(today.getDate() + 1);
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+    const tomorrow = new Date(now);
+    tomorrow.setDate(now.getDate() + 1);
     const tomorrowStr = tomorrow.toISOString().slice(0, 10);
 
-    const todayBest = bestSlotForDate(hourlyScores, todayStr);
+    const todayBestOverall = bestSlotForDate(hourlyScores, todayStr);
+    const todayBestRemaining = bestSlotFromNowToday(hourlyScores, now);
     const tomorrowBest = bestSlotForDate(hourlyScores, tomorrowStr);
 
     if (which === "today") {
-      renderRecommendation(todayBest, todayRecOutput, "today");
+      renderRecommendationToday(todayBestOverall, todayBestRemaining);
     } else {
-      renderRecommendation(tomorrowBest, tomorrowRecOutput, "tomorrow");
+      renderRecommendationTomorrow(tomorrowBest);
     }
+
+    if (recommendationSection)
+      recommendationSection.classList.remove("hidden");
+    currentRecMode = which;
   } catch (err) {
     console.error("Recommendation error", err);
     alert("Could not fetch forecast. Try again later.");
   }
 }
 
-function renderRecommendation(best, container, label) {
-  if (!best) {
-    container.textContent = `No suitable time found for ${label}.`;
+function renderRecommendationToday(bestOverall, bestRemaining) {
+  if (!recommendCard) return;
+
+  if (!bestOverall) {
+    recommendCard.textContent = "No suitable time found for today.";
     return;
   }
-  const dt = new Date(best.timeIso);
-  const timeStr = dt.toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-  container.innerHTML = `
-    <strong>Best time ${label}:</strong> ${timeStr}<br>
-    Walk score: ${best.walkScore}% (Weather ${best.weatherScore}%, Air ${best.airScore}%)<br>
-    Temp ${fmt(best.temp, 1)} °C, Humidity ${fmt(best.hum, 0)} %, Wind ${fmt(
-    best.wind,
-    1
-  )} m/s<br>
-    PM2.5 ${fmt(best.pm25, 1)} µg/m³, PM10 ${fmt(best.pm10, 1)} µg/m³, EU AQI ${fmt(
-    best.aqi,
-    0
-  )}
+
+  const tOverall = formatTimeShort(bestOverall.timeIso);
+  const labelOverall = qualityLabel(bestOverall.walkScore);
+  const labelWeatherOverall = qualityLabel(bestOverall.weatherScore);
+  const labelAirOverall = qualityLabel(bestOverall.airScore);
+
+  let html = `
+    <div class="recommend-card-title">Today’s Recommendation</div>
+    <div class="rec-row">
+      <span class="rec-label">Best time today:</span>
+      <span> ${tOverall}</span>
+      <span class="rec-tag">${labelOverall}</span>
+    </div>
+    <div class="rec-row">
+      <span class="rec-label">Predicted walk score:</span>
+      <span> ${bestOverall.walkScore}% (Weather ${bestOverall.weatherScore}%, Air ${bestOverall.airScore}%)</span>
+    </div>
+    <div class="rec-row">
+      <span class="rec-label">Weather:</span>
+      <span>
+        Temp ${fmt(bestOverall.temp, 1)} °C,
+        Humidity ${fmt(bestOverall.hum, 0)} %,
+        Wind ${fmt(bestOverall.wind, 1)} m/s
+      </span>
+      <span class="rec-tag">${labelWeatherOverall}</span>
+    </div>
+    <div class="rec-row">
+      <span class="rec-label">Air quality:</span>
+      <span>
+        PM2.5 ${fmt(bestOverall.pm25, 1)} µg/m³,
+        PM10 ${fmt(bestOverall.pm10, 1)} µg/m³,
+        EU AQI ${fmt(bestOverall.aqi, 0)}
+      </span>
+      <span class="rec-tag">${labelAirOverall}</span>
+    </div>
   `;
+
+  if (
+    bestRemaining &&
+    bestRemaining.timeIso !== bestOverall.timeIso
+  ) {
+    const tRem = formatTimeShort(bestRemaining.timeIso);
+    const labelRem = qualityLabel(bestRemaining.walkScore);
+    const labelWeatherRem = qualityLabel(bestRemaining.weatherScore);
+    const labelAirRem = qualityLabel(bestRemaining.airScore);
+
+    html += `
+      <hr class="rec-divider">
+      <div class="rec-row">
+        <span class="rec-label">Best time for the rest of today:</span>
+        <span> ${tRem}</span>
+        <span class="rec-tag">${labelRem}</span>
+      </div>
+      <div class="rec-row">
+        <span class="rec-label">Predicted walk score:</span>
+        <span> ${bestRemaining.walkScore}% (Weather ${bestRemaining.weatherScore}%, Air ${bestRemaining.airScore}%)</span>
+      </div>
+      <div class="rec-row">
+        <span class="rec-label">Weather:</span>
+        <span>
+          Temp ${fmt(bestRemaining.temp, 1)} °C,
+          Humidity ${fmt(bestRemaining.hum, 0)} %,
+          Wind ${fmt(bestRemaining.wind, 1)} m/s
+        </span>
+        <span class="rec-tag">${labelWeatherRem}</span>
+      </div>
+      <div class="rec-row">
+        <span class="rec-label">Air quality:</span>
+        <span>
+          PM2.5 ${fmt(bestRemaining.pm25, 1)} µg/m³,
+          PM10 ${fmt(bestRemaining.pm10, 1)} µg/m³,
+          EU AQI ${fmt(bestRemaining.aqi, 0)}
+        </span>
+        <span class="rec-tag">${labelAirRem}</span>
+      </div>
+    `;
+  }
+
+  recommendCard.innerHTML = html;
+}
+
+function renderRecommendationTomorrow(best) {
+  if (!recommendCard) return;
+
+  if (!best) {
+    recommendCard.textContent = "No suitable time found for tomorrow.";
+    return;
+  }
+
+  const t = formatTimeShort(best.timeIso);
+  const labelOverall = qualityLabel(best.walkScore);
+  const labelWeather = qualityLabel(best.weatherScore);
+  const labelAir = qualityLabel(best.airScore);
+
+  const html = `
+    <div class="recommend-card-title">Tomorrow’s Recommendation</div>
+    <div class="rec-row">
+      <span class="rec-label">Best time tomorrow:</span>
+      <span> ${t}</span>
+      <span class="rec-tag">${labelOverall}</span>
+    </div>
+    <div class="rec-row">
+      <span class="rec-label">Predicted walk score:</span>
+      <span> ${best.walkScore}% (Weather ${best.weatherScore}%, Air ${best.airScore}%)</span>
+    </div>
+    <div class="rec-row">
+      <span class="rec-label">Weather:</span>
+      <span>
+        Temp ${fmt(best.temp, 1)} °C,
+        Humidity ${fmt(best.hum, 0)} %,
+        Wind ${fmt(best.wind, 1)} m/s
+      </span>
+      <span class="rec-tag">${labelWeather}</span>
+    </div>
+    <div class="rec-row">
+      <span class="rec-label">Air quality:</span>
+      <span>
+        PM2.5 ${fmt(best.pm25, 1)} µg/m³,
+        PM10 ${fmt(best.pm10, 1)} µg/m³,
+        EU AQI ${fmt(best.aqi, 0)}
+      </span>
+      <span class="rec-tag">${labelAir}</span>
+    </div>
+  `;
+
+  recommendCard.innerHTML = html;
 }
 
 // ---------------------------------------------------------------------------

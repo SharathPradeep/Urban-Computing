@@ -12,6 +12,10 @@ body {
   color: #111827;
 }
 
+.hidden {
+  display: none !important;
+}
+
 .app-shell {
   max-width: 1100px;
   margin: 0 auto;
@@ -151,23 +155,47 @@ main {
   flex-wrap: wrap;
 }
 
-.recommend-output {
-  display: flex;
-  gap: 16px;
-  justify-content: center;
-  align-items: stretch;
-  margin-top: 12px;
-  flex-wrap: wrap;
+/* Single recommendation card */
+
+.recommend-section {
+  margin-top: 16px;
 }
 
-.rec-card {
-  min-width: 260px;
-  max-width: 360px;
+.recommend-card {
   background: #f3f4f6;
   border-radius: 16px;
-  padding: 12px 16px;
+  padding: 16px 20px;
   font-size: 0.95rem;
-  color: #374151;
+  color: #111827;
+}
+
+.recommend-card-title {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.rec-row {
+  margin: 4px 0;
+  line-height: 1.5;
+}
+
+.rec-label {
+  font-weight: 600;
+}
+
+.rec-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  background: #e5e7eb;
+}
+
+.rec-divider {
+  border: 0;
+  border-top: 1px solid #e5e7eb;
+  margin: 10px 0;
 }
 
 /* Past walks table */
@@ -318,8 +346,4 @@ main {
     align-items: flex-start;
     gap: 8px;
   }
-}
-
-.hidden {
-  display: none !important;
 }
