@@ -185,22 +185,50 @@ function formatTimeShort(iso) {
 
 // Reverse geocode for nice location name
 async function reverseGeocode(lat, lon) {
-  const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}`;
+  const url =
+    `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}`;
+
   try {
     const res = await fetch(url, {
-      headers: { "Accept-Language": "en" },
+      headers: {
+        "Accept-Language": "en",
+        // A more descriptive UA is recommended by Nominatim
+        "User-Agent": "WalkGuide/1.0 (contact: example@example.com)",
+      },
     });
     if (!res.ok) throw new Error("Reverse geocode failed");
+
     const data = await res.json();
     const addr = data.address || {};
-    const { city, town, village, suburb, state, country } = addr;
-    const place = city || town || village || suburb || state || "Unknown place";
-    return `${place}, ${country || ""}`.trim();
+
+    // Try a richer set of address fields
+    const place =
+      addr.city ||
+      addr.town ||
+      addr.village ||
+      addr.hamlet ||
+      addr.suburb ||
+      addr.neighbourhood ||
+      addr.locality ||
+      addr.county ||
+      addr.state ||
+      // fallback: first part of display_name, e.g. "Dublin, County Dublin, Ireland"
+      (data.display_name
+        ? data.display_name.split(",").slice(0, 2).join(",").trim()
+        : null);
+
+    const country = addr.country || "";
+
+    if (place && country) return `${place}, ${country}`;
+    if (place) return place;
+    if (country) return country;
+    return "Unknown location";
   } catch (err) {
     console.warn("Reverse geocode error", err);
-    return "Unknown place";
+    return "Unknown location";
   }
 }
+
 
 // ---------------------------------------------------------------------------
 // AUTH
