@@ -236,6 +236,24 @@ main {
   cursor: pointer;
 }
 
+/* Dark pill used for "View Analytics" */
+.primary-view-btn {
+  padding: 10px 24px;
+  border-radius: 999px;
+  border: none;
+  background: #111827;
+  color: #f9fafb;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.08s ease;
+}
+
+.primary-view-btn:hover {
+  background: #374151;
+  transform: translateY(-1px);
+}
+
 /* Analytics view */
 
 .back-btn {
@@ -301,6 +319,24 @@ main {
   margin-bottom: 10px;
 }
 
+/* Walk route map */
+
+.route-map {
+  width: 100%;
+  height: 260px;
+  border-radius: 20px;
+  overflow: hidden;
+  background: #e5e7eb;
+}
+
+.route-map.map-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
 /* History view */
 
 #historyView h2 {
@@ -344,7 +380,7 @@ main {
   position: relative;
   width: 100%;
   max-width: 100%;
-  height: 260px;          
+  height: 260px;
 }
 
 #historyScoreChart,
@@ -355,6 +391,10 @@ main {
 
 @media (max-width: 900px) {
   .chart-wrapper {
-    height: 220px;        
+    height: 220px;
+  }
+
+  .route-map {
+    height: 220px;
   }
 }

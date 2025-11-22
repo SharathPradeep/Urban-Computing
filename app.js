@@ -126,6 +126,10 @@ let micChart = null;
 let historyScoreChart = null;
 let historyAvgChart = null;
 
+// Leaflet route map
+let routeMap = null;
+let routeLayers = [];
+
 let currentRecMode = null; // "today" | "tomorrow" | null
 
 // ---------------------------------------------------------------------------
@@ -177,7 +181,6 @@ function clean(obj) {
   return out;
 }
 
-
 function formatTimeShort(iso) {
   const d = new Date(iso);
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -212,7 +215,7 @@ async function reverseGeocode(lat, lon) {
       addr.locality ||
       addr.county ||
       addr.state ||
-      // fallback: first part of display_name, e.g. "Dublin, County Dublin, Ireland"
+      // fallback: first part of display_name
       (data.display_name
         ? data.display_name.split(",").slice(0, 2).join(",").trim()
         : null);
@@ -228,7 +231,6 @@ async function reverseGeocode(lat, lon) {
     return "Unknown location";
   }
 }
-
 
 // ---------------------------------------------------------------------------
 // AUTH
@@ -781,7 +783,7 @@ async function loadPastWalksForUser(uid) {
 }
 
 // ---------------------------------------------------------------------------
-// PER-WALK ANALYTICS (Chart.js + summary)
+// PER-WALK ANALYTICS (Chart.js + summary + route map)
 // ---------------------------------------------------------------------------
 async function openAnalyticsForSession(sessionId) {
   if (!currentUser) return;
@@ -860,6 +862,7 @@ async function openAnalyticsForSession(sessionId) {
 
   const labels = [];
   const noiseSeries = [];
+  const routePoints = [];
 
   readingsSnap.forEach((rSnap) => {
     const r = rSnap.data();
@@ -867,7 +870,16 @@ async function openAnalyticsForSession(sessionId) {
     labels.push(
       ts ? ts.toLocaleTimeString([], { hour12: false }) : ""
     );
-    noiseSeries.push(r.sound_dbfs ?? null);
+    const noise = r.sound_dbfs ?? null;
+    noiseSeries.push(noise);
+
+    if (typeof r.lat === "number" && typeof r.lon === "number") {
+      routePoints.push({
+        lat: r.lat,
+        lon: r.lon,
+        noise,
+      });
+    }
   });
 
   if (micChart) micChart.destroy();
@@ -896,6 +908,7 @@ async function openAnalyticsForSession(sessionId) {
   });
 
   showView("analytics");
+  updateRouteMap(routePoints);
 }
 
 backFromAnalytics.addEventListener("click", () => {
@@ -1031,6 +1044,94 @@ function renderHistoryAnalytics() {
       },
     }
   );
+}
+
+// ---------------------------------------------------------------------------
+// ROUTE MAP (Leaflet) – colour-coded by noise
+// ---------------------------------------------------------------------------
+function noiseColor(db) {
+  if (!Number.isFinite(db)) return "#6b7280"; // grey
+  // db is negative: quiet ~ -80, loud ~ -25
+  if (db <= -60) return "#22c55e"; // quiet (green-ish)
+  if (db <= -45) return "#f97316"; // medium (orange-ish)
+  return "#ef4444"; // loud (red-ish)
+}
+
+function updateRouteMap(points) {
+  const mapContainer = document.getElementById("routeMap");
+  if (!mapContainer || typeof L === "undefined") return;
+
+  if (!points || points.length === 0) {
+    mapContainer.classList.add("map-empty");
+    mapContainer.innerHTML = "Not enough location data for this walk.";
+    return;
+  }
+
+  const latLngs = points.map((p) => [p.lat, p.lon]);
+
+  mapContainer.classList.remove("map-empty");
+  mapContainer.innerHTML = "";
+
+  if (!routeMap) {
+    routeMap = L.map("routeMap");
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    }).addTo(routeMap);
+  }
+
+  // Clear previous layers
+  routeLayers.forEach((layer) => {
+    try {
+      routeMap.removeLayer(layer);
+    } catch {}
+  });
+  routeLayers = [];
+
+  // Draw colour-coded segments by noise
+  if (latLngs.length >= 2) {
+    for (let i = 0; i < points.length - 1; i++) {
+      const p1 = points[i];
+      const p2 = points[i + 1];
+      const n1 = p1.noise;
+      const n2 = p2.noise;
+      let avgNoise = null;
+      if (Number.isFinite(n1) && Number.isFinite(n2)) {
+        avgNoise = (n1 + n2) / 2;
+      } else if (Number.isFinite(n1)) {
+        avgNoise = n1;
+      } else if (Number.isFinite(n2)) {
+        avgNoise = n2;
+      }
+
+      const seg = L.polyline(
+        [
+          [p1.lat, p1.lon],
+          [p2.lat, p2.lon],
+        ],
+        {
+          weight: 4,
+          color: noiseColor(avgNoise),
+        }
+      ).addTo(routeMap);
+      routeLayers.push(seg);
+    }
+  }
+
+  // Start & end markers
+  const startMarker = L.circleMarker(latLngs[0], { radius: 5 }).addTo(routeMap);
+  const endMarker = L.circleMarker(latLngs[latLngs.length - 1], {
+    radius: 5,
+  }).addTo(routeMap);
+  routeLayers.push(startMarker, endMarker);
+
+  routeMap.fitBounds(L.latLngBounds(latLngs), { padding: [16, 16] });
+
+  // Fix sizing when view is switched
+  setTimeout(() => {
+    routeMap.invalidateSize();
+  }, 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -1256,7 +1357,6 @@ function renderRecommendationToday(bestOverall, bestRemaining) {
   recommendCard.innerHTML = html;
 }
 
-
 function renderRecommendationTomorrow(best) {
   if (!recommendCard) return;
 
@@ -1297,7 +1397,6 @@ function renderRecommendationTomorrow(best) {
 
   recommendCard.innerHTML = html;
 }
-
 
 // ---------------------------------------------------------------------------
 // INITIAL STATE

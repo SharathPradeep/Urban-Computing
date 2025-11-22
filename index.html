@@ -4,6 +4,15 @@
   <meta charset="utf-8" />
   <title>Walk Guide</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Leaflet CSS for map -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -31,7 +40,8 @@
         </div>
 
         <div class="center-row">
-          <button id="quickAnalyticsButton" class="pill-btn" hidden>
+          <!-- Styled like the dark "View" buttons -->
+          <button id="quickAnalyticsButton" class="primary-view-btn" hidden>
             View Analytics
           </button>
         </div>
@@ -140,6 +150,14 @@
             </div>
           </article>
         </div>
+
+        <!-- Walk route map -->
+        <section class="extra-charts">
+          <h3>Walk Route</h3>
+          <div id="routeMap" class="route-map map-empty">
+            Not enough location data for this walk.
+          </div>
+        </section>
       </section>
 
       <!-- HISTORY ANALYTICS VIEW ------------------------------------------>
@@ -166,6 +184,13 @@
       </section>
     </main>
   </div>
+
+  <!-- Leaflet JS for map -->
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
