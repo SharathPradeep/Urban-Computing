@@ -467,18 +467,18 @@ function resetAggregator() {
 }
 
 // Noise scoring (device-agnostic simple mapping)
-// -100 to -50 dBFS => 100
-// -50 to -20 dBFS  => 100 -> 0
+// -100 to -40 dBFS => 100
+// -40 to -20 dBFS  => 100 -> 0
 // -20 to 0 dBFS    => 0
 function scoreNoise(avgDbfs) {
   if (!Number.isFinite(avgDbfs)) return 50;
   const v = Math.max(MIN_DBFS, Math.min(MAX_DBFS, avgDbfs));
 
-  if (v <= -50) return 100;
+  if (v <= -40) return 100;
   if (v >= -20) return 0;
 
-  // v in (-50, -20): linearly 100 -> 0
-  const t = (v - (-50)) / (-20 - (-50)); // (v + 50) / 30, 0..1
+  // v in (-40, -20): linearly 100 -> 0
+  const t = (v - (-40)) / (-20 - (-40)); // (v + 40) / 30, 0..1
   return Math.round(100 * (1 - t));
 }
 
