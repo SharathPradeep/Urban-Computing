@@ -309,7 +309,6 @@ onAuthStateChanged(auth, async (user) => {
   }
 });
 
-
 // ---------------------------------------------------------------------------
 // GEOLOCATION
 // ---------------------------------------------------------------------------
@@ -467,47 +466,94 @@ function resetAggregator() {
   };
 }
 
+// Noise scoring (device-agnostic simple mapping)
+// -100 to -50 dBFS => 100
+// -50 to -20 dBFS  => 100 -> 0
+// -20 to 0 dBFS    => 0
 function scoreNoise(avgDbfs) {
-  const QUIET = -80;
-  const LOUD = -25;
   if (!Number.isFinite(avgDbfs)) return 50;
-  const clamped = Math.min(LOUD, Math.max(QUIET, avgDbfs));
-  const t = (clamped - LOUD) / (QUIET - LOUD); // 0 loud, 1 quiet
-  return Math.round(t * 100);
+  const v = Math.max(MIN_DBFS, Math.min(MAX_DBFS, avgDbfs));
+
+  if (v <= -50) return 100;
+  if (v >= -20) return 0;
+
+  // v in (-50, -20): linearly 100 -> 0
+  const t = (v - (-50)) / (-20 - (-50)); // (v + 50) / 30, 0..1
+  return Math.round(100 * (1 - t));
 }
 
+// Ireland-tuned weather scoring
 function scoreWeather(tempC, humidityPct, windMs, precipMm) {
+  // ----------------- Temperature -----------------
+  // T_MIN = -2, OPT [8, 20], T_MAX = 30
   let tempScore;
-  if (!Number.isFinite(tempC)) tempScore = 50;
-  else if (tempC <= 0 || tempC >= 35) tempScore = 0;
-  else if (tempC >= 15 && tempC <= 22) tempScore = 100;
-  else if (tempC < 15) tempScore = ((tempC - 0) / (15 - 0)) * 100;
-  else tempScore = ((35 - tempC) / (35 - 22)) * 100;
+  if (!Number.isFinite(tempC)) {
+    tempScore = 50;
+  } else if (tempC <= -2 || tempC >= 30) {
+    tempScore = 0;
+  } else if (tempC < 8) {
+    // -2 .. 8 => 0 .. 100
+    tempScore = ((tempC - (-2)) / (8 - (-2))) * 100;
+  } else if (tempC <= 20) {
+    tempScore = 100;
+  } else {
+    // 20 .. 30 => 100 .. 0
+    tempScore = ((30 - tempC) / (30 - 20)) * 100;
+  }
 
+  // ----------------- Humidity -----------------
+  // H_MIN = 30, OPT [50, 85], H_MAX = 98
   let humScore;
-  if (!Number.isFinite(humidityPct)) humScore = 50;
-  else if (humidityPct <= 20 || humidityPct >= 90) humScore = 0;
-  else if (humidityPct >= 40 && humidityPct <= 60) humScore = 100;
-  else if (humidityPct < 40)
-    humScore = ((humidityPct - 20) / (40 - 20)) * 100;
-  else humScore = ((90 - humidityPct) / (90 - 60)) * 100;
+  if (!Number.isFinite(humidityPct)) {
+    humScore = 50;
+  } else if (humidityPct <= 30 || humidityPct >= 98) {
+    humScore = 0;
+  } else if (humidityPct < 50) {
+    humScore = ((humidityPct - 30) / (50 - 30)) * 100;
+  } else if (humidityPct <= 85) {
+    humScore = 100;
+  } else {
+    humScore = ((98 - humidityPct) / (98 - 85)) * 100;
+  }
 
+  // ----------------- Wind -----------------
+  // <=0.5 ~60, 0.5–6: 60→100, 6–9: 100→60, 9–15: 60→0, >=15: 0
   let windScore;
-  if (!Number.isFinite(windMs)) windScore = 50;
-  else if (windMs >= 12) windScore = 0;
-  else if (windMs >= 1 && windMs <= 5) windScore = 100;
-  else if (windMs < 1) windScore = windMs * 100;
-  else windScore = ((12 - windMs) / (12 - 5)) * 100;
+  if (!Number.isFinite(windMs)) {
+    windScore = 50;
+  } else if (windMs <= 0.5) {
+    windScore = 60;
+  } else if (windMs < 6) {
+    windScore = 60 + ((windMs - 0.5) / (6 - 0.5)) * 40;
+  } else if (windMs < 9) {
+    windScore = 100 - ((windMs - 6) / (9 - 6)) * 40;
+  } else if (windMs < 15) {
+    windScore = 60 - ((windMs - 9) / (15 - 9)) * 60;
+  } else {
+    windScore = 0;
+  }
 
+  // ----------------- Precipitation (mm/h) -----------------
+  // <=0.2 =>100, 0.2–1 =>100→70, 1–3 =>70→30, >3 =>0
   let rainScore;
-  if (!Number.isFinite(precipMm)) rainScore = 50;
-  else if (precipMm === 0) rainScore = 100;
-  else if (precipMm >= 4) rainScore = 0;
-  else rainScore = ((4 - precipMm) / 4) * 100;
+  if (!Number.isFinite(precipMm)) {
+    rainScore = 50;
+  } else if (precipMm <= 0.2) {
+    rainScore = 100;
+  } else if (precipMm <= 1.0) {
+    const t = (precipMm - 0.2) / (1.0 - 0.2); // 0..1
+    rainScore = 100 - t * 30; // 100 -> 70
+  } else if (precipMm <= 3.0) {
+    const t = (precipMm - 1.0) / (3.0 - 1.0); // 0..1
+    rainScore = 70 - t * 40; // 70 -> 30
+  } else {
+    rainScore = 0;
+  }
 
-  return Math.round(
-    0.5 * tempScore + 0.2 * humScore + 0.2 * windScore + 0.1 * rainScore
-  );
+  const combined =
+    0.3 * tempScore + 0.2 * humScore + 0.2 * windScore + 0.3 * rainScore;
+
+  return Math.round(combined);
 }
 
 function scoreAir(pm25, pm10, aqi) {
@@ -556,8 +602,9 @@ function computeWalkSummary(agg) {
   );
   const airScore = scoreAir(avgPm25, avgPm10, avgAqi);
 
+  // Final walk score: 0.3 * noise + 0.4 * weather + 0.3 * air
   const walkScore = Math.round(
-    0.4 * noiseScore + 0.3 * weatherScore + 0.3 * airScore
+    0.3 * noiseScore + 0.4 * weatherScore + 0.3 * airScore
   );
 
   return {
@@ -1112,7 +1159,7 @@ function updateRouteMap(points) {
   });
   routeLayers = [];
 
-  // Draw colour-coded segments by noise (same logic as before)
+  // Draw colour-coded segments by noise
   if (latLngs.length >= 2) {
     for (let i = 0; i < points.length - 1; i++) {
       const p1 = points[i];
@@ -1156,7 +1203,6 @@ function updateRouteMap(points) {
     routeMap.invalidateSize();
   }, 0);
 }
-
 
 // ---------------------------------------------------------------------------
 // RECOMMENDATIONS – BEST TIME TODAY / TOMORROW
@@ -1221,7 +1267,11 @@ function buildHourlyScores(forecast) {
 
     const weatherScore = scoreWeather(temp, hum, wind, precip);
     const airScore = scoreAir(pm25, pm10, aqi);
-    const walkScore = Math.round(0.5 * weatherScore + 0.5 * airScore);
+
+    // For forecast-based "walkScore", we only have weather + air (no noise).
+    // Keep same relative emphasis (0.4 weather, 0.3 air) and renormalise to 0–100.
+    const combined = 0.4 * weatherScore + 0.3 * airScore;
+    const walkScore = Math.round(combined / 0.7);
 
     scores.push({
       timeIso: times[i],
