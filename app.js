@@ -23,9 +23,9 @@ import {
   Timestamp,
 } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js";
 
-// ---------------------------------------------------------------------------
-// FIREBASE INIT
-// ---------------------------------------------------------------------------
+
+//firebase init
+
 const firebaseConfig = {
   apiKey: "AIzaSyAhw_Q8LwkTA_MhsCX-SsKST5zSA2wdwSo",
   authDomain: "walkguide-68d15.firebaseapp.com",
@@ -43,9 +43,8 @@ const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: "select_account" });
 
-// ---------------------------------------------------------------------------
-// DOM REFERENCES
-// ---------------------------------------------------------------------------
+//dom references
+
 const homeView = document.getElementById("homeView");
 const analyticsView = document.getElementById("analyticsView");
 const historyView = document.getElementById("historyView");
@@ -90,9 +89,8 @@ const micCanvas = document.getElementById("micChart");
 const historyScoreCanvas = document.getElementById("historyScoreChart");
 const historyAvgCanvas = document.getElementById("historyAvgChart");
 
-// ---------------------------------------------------------------------------
-// GLOBAL STATE
-// ---------------------------------------------------------------------------
+//global state
+
 let currentUser = null;
 let isRecording = false;
 
@@ -126,15 +124,15 @@ let micChart = null;
 let historyScoreChart = null;
 let historyAvgChart = null;
 
-// Leaflet route map
+//leaflet route map
+
 let routeMap = null;
 let routeLayers = [];
 
-let currentRecMode = null; // "today" | "tomorrow" | null
+let currentRecMode = null;
 
-// ---------------------------------------------------------------------------
-// VIEW HELPERS
-// ---------------------------------------------------------------------------
+//view helpers
+
 function showView(viewId) {
   for (const v of [homeView, analyticsView, historyView]) {
     v.classList.remove("active");
@@ -144,15 +142,15 @@ function showView(viewId) {
   if (viewId === "history") historyView.classList.add("active");
 }
 
-// ---------------------------------------------------------------------------
-// GENERIC HELPERS
-// ---------------------------------------------------------------------------
+//generic helpers
+
 function fmt(num, digits = 1) {
   if (num === null || num === undefined || Number.isNaN(num)) return "--";
   return Number(num).toFixed(digits);
 }
 
-// Convert various Firestore timestamp formats -> JS Date or null
+//converting firestore timestamp to js date
+
 function toJsDateMaybe(value) {
   if (!value) return null;
   if (typeof value.toDate === "function") return value.toDate();
@@ -186,7 +184,7 @@ function formatTimeShort(iso) {
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-// Reverse geocode for nice location name
+//reverse geocode
 async function reverseGeocode(lat, lon) {
   const url =
     `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}`;
@@ -195,8 +193,7 @@ async function reverseGeocode(lat, lon) {
     const res = await fetch(url, {
       headers: {
         "Accept-Language": "en",
-        // A more descriptive UA is recommended by Nominatim
-        "User-Agent": "WalkGuide/1.0 (contact: example@example.com)",
+        "User-Agent": "WalkGuide/1.0",
       },
     });
     if (!res.ok) throw new Error("Reverse geocode failed");
@@ -204,7 +201,6 @@ async function reverseGeocode(lat, lon) {
     const data = await res.json();
     const addr = data.address || {};
 
-    // Try a richer set of address fields
     const place =
       addr.city ||
       addr.town ||
@@ -215,7 +211,7 @@ async function reverseGeocode(lat, lon) {
       addr.locality ||
       addr.county ||
       addr.state ||
-      // fallback: first part of display_name
+
       (data.display_name
         ? data.display_name.split(",").slice(0, 2).join(",").trim()
         : null);
@@ -232,9 +228,8 @@ async function reverseGeocode(lat, lon) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// AUTH
-// ---------------------------------------------------------------------------
+//auth
+
 function updateAuthUI(user) {
   if (!user) {
     authButton.textContent = "Login / Signup";
@@ -260,7 +255,6 @@ function updateAuthUI(user) {
     recordStatus.textContent = "Ready to record your next walk.";
 
     if (recommendRow) recommendRow.classList.remove("hidden");
-    // keep recommendationSection hidden until user clicks a button
     if (pastWalksSection) pastWalksSection.classList.remove("hidden");
     if (historyAnalyticsButton)
       historyAnalyticsButton.classList.remove("hidden");
@@ -295,13 +289,10 @@ onAuthStateChanged(auth, async (user) => {
   quickAnalyticsButton.hidden = true;
 
   if (user) {
-    // Logged in: load their sessions
     await loadPastWalksForUser(user.uid);
   } else {
-    // Logged out: always send back to Home
     showView("home");
 
-    // Hide any open recommendation card
     if (recommendationSection) {
       recommendationSection.classList.add("hidden");
     }
@@ -309,9 +300,8 @@ onAuthStateChanged(auth, async (user) => {
   }
 });
 
-// ---------------------------------------------------------------------------
-// GEOLOCATION
-// ---------------------------------------------------------------------------
+//geolocation
+
 function getCurrentPositionOnce() {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
@@ -347,9 +337,8 @@ function stopGpsWatch() {
   geoWatchId = null;
 }
 
-// ---------------------------------------------------------------------------
-// MICROPHONE
-// ---------------------------------------------------------------------------
+//microphone
+
 const MIC_WARMUP_MS = 1200;
 const MIN_DBFS = -100;
 const MAX_DBFS = 0;
@@ -418,9 +407,9 @@ function stopMic() {
   micBuf = null;
 }
 
-// ---------------------------------------------------------------------------
-// WEATHER + AIR (Open-Meteo current endpoints)
-// ---------------------------------------------------------------------------
+
+//weather+air
+
 async function fetchWeather(lat, lon) {
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
@@ -447,9 +436,8 @@ async function fetchAir(lat, lon) {
   wxCache.air = json.current ?? null;
 }
 
-// ---------------------------------------------------------------------------
-// AGGREGATOR & SCORING
-// ---------------------------------------------------------------------------
+// aggregator & scoring
+
 function resetAggregator() {
   currentAgg = {
     startTs: null,
@@ -466,10 +454,7 @@ function resetAggregator() {
   };
 }
 
-// Noise scoring (device-agnostic simple mapping)
-// -100 to -40 dBFS => 100
-// -40 to -20 dBFS  => 100 -> 0
-// -20 to 0 dBFS    => 0
+//noise scoring
 function scoreNoise(avgDbfs) {
   if (!Number.isFinite(avgDbfs)) return 50;
   const v = Math.max(MIN_DBFS, Math.min(MAX_DBFS, avgDbfs));
@@ -477,32 +462,27 @@ function scoreNoise(avgDbfs) {
   if (v <= -40) return 100;
   if (v >= -20) return 0;
 
-  // v in (-40, -20): linearly 100 -> 0
-  const t = (v - (-40)) / (-20 - (-40)); // (v + 40) / 30, 0..1
+
+  const t = (v - (-40)) / (-20 - (-40)); 
   return Math.round(100 * (1 - t));
 }
 
-// Ireland-tuned weather scoring
+//ireland tuned weather scoring
 function scoreWeather(tempC, humidityPct, windMs, precipMm) {
-  // ----------------- Temperature -----------------
-  // T_MIN = -2, OPT [8, 20], T_MAX = 30
   let tempScore;
   if (!Number.isFinite(tempC)) {
     tempScore = 50;
   } else if (tempC <= -2 || tempC >= 30) {
     tempScore = 0;
   } else if (tempC < 8) {
-    // -2 .. 8 => 0 .. 100
     tempScore = ((tempC - (-2)) / (8 - (-2))) * 100;
   } else if (tempC <= 20) {
     tempScore = 100;
   } else {
-    // 20 .. 30 => 100 .. 0
     tempScore = ((30 - tempC) / (30 - 20)) * 100;
   }
 
-  // ----------------- Humidity -----------------
-  // H_MIN = 30, OPT [50, 85], H_MAX = 98
+  //humidity
   let humScore;
   if (!Number.isFinite(humidityPct)) {
     humScore = 50;
@@ -516,8 +496,7 @@ function scoreWeather(tempC, humidityPct, windMs, precipMm) {
     humScore = ((98 - humidityPct) / (98 - 85)) * 100;
   }
 
-  // ----------------- Wind -----------------
-  // <=0.5 ~60, 0.5–6: 60→100, 6–9: 100→60, 9–15: 60→0, >=15: 0
+  //wind
   let windScore;
   if (!Number.isFinite(windMs)) {
     windScore = 50;
@@ -533,19 +512,18 @@ function scoreWeather(tempC, humidityPct, windMs, precipMm) {
     windScore = 0;
   }
 
-  // ----------------- Precipitation (mm/h) -----------------
-  // <=0.2 =>100, 0.2–1 =>100→70, 1–3 =>70→30, >3 =>0
+  //precipitation
   let rainScore;
   if (!Number.isFinite(precipMm)) {
     rainScore = 50;
   } else if (precipMm <= 0.2) {
     rainScore = 100;
   } else if (precipMm <= 1.0) {
-    const t = (precipMm - 0.2) / (1.0 - 0.2); // 0..1
-    rainScore = 100 - t * 30; // 100 -> 70
+    const t = (precipMm - 0.2) / (1.0 - 0.2); 
+    rainScore = 100 - t * 30; 
   } else if (precipMm <= 3.0) {
-    const t = (precipMm - 1.0) / (3.0 - 1.0); // 0..1
-    rainScore = 70 - t * 40; // 70 -> 30
+    const t = (precipMm - 1.0) / (3.0 - 1.0); 
+    rainScore = 70 - t * 40; 
   } else {
     rainScore = 0;
   }
@@ -602,7 +580,6 @@ function computeWalkSummary(agg) {
   );
   const airScore = scoreAir(avgPm25, avgPm10, avgAqi);
 
-  // Final walk score: 0.3 * noise + 0.4 * weather + 0.3 * air
   const walkScore = Math.round(
     0.3 * noiseScore + 0.4 * weatherScore + 0.3 * airScore
   );
@@ -624,9 +601,8 @@ function computeWalkSummary(agg) {
   };
 }
 
-// ---------------------------------------------------------------------------
-// RECORD / STOP LOGIC
-// ---------------------------------------------------------------------------
+//record/stop
+
 recordButton.addEventListener("click", () => {
   if (!isRecording) startRecording();
   else stopRecording();
@@ -738,7 +714,7 @@ async function stopRecording(isError = false) {
   currentAgg = null;
 }
 
-// Flush once per second to Firestore
+//flushing once per second to firestore
 async function flushOneSecond() {
   if (!currentSessionRef) return;
   if (!countDB || !lastPos || !wxCache.weather || !wxCache.air) return;
@@ -785,9 +761,7 @@ async function flushOneSecond() {
   }
 }
 
-// ---------------------------------------------------------------------------
-// PAST WALKS TABLE
-// ---------------------------------------------------------------------------
+//past walks table
 async function loadPastWalksForUser(uid) {
   const sessionsCol = collection(db, "users", uid, "sessions");
   const q = query(sessionsCol, orderBy("startedAt", "desc"));
@@ -840,9 +814,7 @@ async function loadPastWalksForUser(uid) {
   });
 }
 
-// ---------------------------------------------------------------------------
-// PER-WALK ANALYTICS (Chart.js + summary + route map)
-// ---------------------------------------------------------------------------
+//per walk analytics
 async function openAnalyticsForSession(sessionId) {
   if (!currentUser) return;
 
@@ -977,9 +949,8 @@ quickAnalyticsButton.addEventListener("click", () => {
   if (lastCompletedSessionId) openAnalyticsForSession(lastCompletedSessionId);
 });
 
-// ---------------------------------------------------------------------------
-// HISTORY ANALYTICS
-// ---------------------------------------------------------------------------
+//history analytics
+
 historyAnalyticsButton.addEventListener("click", () => {
   renderHistoryAnalytics();
   showView("history");
@@ -1104,26 +1075,22 @@ function renderHistoryAnalytics() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// ROUTE MAP (Leaflet) – colour-coded by noise
-// ---------------------------------------------------------------------------
+
+//route map
 function noiseColor(db) {
-  if (!Number.isFinite(db)) return "#6b7280"; // grey
-  // db is negative: quiet ~ -80, loud ~ -25
-  if (db <= -60) return "#22c55e"; // quiet (green-ish)
-  if (db <= -45) return "#f97316"; // medium (orange-ish)
-  return "#ef4444"; // loud (red-ish)
+  if (!Number.isFinite(db)) return "#6b7280";
+  if (db <= -60) return "#22c55e";
+  if (db <= -45) return "#f97316";
+  return "#ef4444"; 
 }
 
 function updateRouteMap(points) {
   const mapContainer = document.getElementById("routeMap");
   if (!mapContainer || typeof L === "undefined") return;
 
-  // No GPS points for this walk
   if (!points || points.length === 0) {
-    // If a map already exists, remove it completely
     if (routeMap) {
-      routeMap.remove();      // destroys Leaflet instance & DOM
+      routeMap.remove();
       routeMap = null;
       routeLayers = [];
     }
@@ -1134,12 +1101,10 @@ function updateRouteMap(points) {
 
   const latLngs = points.map((p) => [p.lat, p.lon]);
 
-  // First-time initialisation
   if (!routeMap) {
     mapContainer.classList.remove("map-empty");
-    mapContainer.innerHTML = "";                 // clear placeholder ONCE
+    mapContainer.innerHTML = "";
 
-    // Create Leaflet map bound to the existing DOM element
     routeMap = L.map(mapContainer);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
@@ -1147,11 +1112,9 @@ function updateRouteMap(points) {
         '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     }).addTo(routeMap);
   } else {
-    // Reusing existing map – just ensure placeholder styles are gone
     mapContainer.classList.remove("map-empty");
   }
 
-  // Remove previous route layers
   routeLayers.forEach((layer) => {
     try {
       routeMap.removeLayer(layer);
@@ -1159,7 +1122,6 @@ function updateRouteMap(points) {
   });
   routeLayers = [];
 
-  // Draw colour-coded segments by noise
   if (latLngs.length >= 2) {
     for (let i = 0; i < points.length - 1; i++) {
       const p1 = points[i];
@@ -1190,23 +1152,20 @@ function updateRouteMap(points) {
     }
   }
 
-  // Start / end markers
   const startMarker = L.circleMarker(latLngs[0], { radius: 5 }).addTo(routeMap);
   const endMarker = L.circleMarker(latLngs[latLngs.length - 1], {
     radius: 5,
   }).addTo(routeMap);
   routeLayers.push(startMarker, endMarker);
 
-  // Fit view to route and fix size
   routeMap.fitBounds(L.latLngBounds(latLngs), { padding: [16, 16] });
   setTimeout(() => {
     routeMap.invalidateSize();
   }, 0);
 }
 
-// ---------------------------------------------------------------------------
-// RECOMMENDATIONS – BEST TIME TODAY / TOMORROW
-// ---------------------------------------------------------------------------
+
+//recommendations
 todayRecButton.addEventListener("click", () => {
   toggleRecommendation("today");
 });
@@ -1217,7 +1176,6 @@ tomorrowRecButton.addEventListener("click", () => {
 async function toggleRecommendation(which) {
   if (!recommendationSection) return;
 
-  // Clicking the same button again hides the card
   if (
     currentRecMode === which &&
     !recommendationSection.classList.contains("hidden")
@@ -1268,8 +1226,6 @@ function buildHourlyScores(forecast) {
     const weatherScore = scoreWeather(temp, hum, wind, precip);
     const airScore = scoreAir(pm25, pm10, aqi);
 
-    // For forecast-based "walkScore", we only have weather + air (no noise).
-    // Keep same relative emphasis (0.4 weather, 0.3 air) and renormalise to 0–100.
     const combined = 0.4 * weatherScore + 0.3 * airScore;
     const walkScore = Math.round(combined / 0.7);
 
@@ -1395,7 +1351,6 @@ function renderRecommendationToday(bestOverall, bestRemaining) {
     </div>
   `;
 
-  // If best overall time is in the past, also show "best for rest of today"
   if (bestRemaining && bestRemaining.timeIso !== bestOverall.timeIso) {
     const tRem = formatTimeShort(bestRemaining.timeIso);
 
@@ -1472,8 +1427,8 @@ function renderRecommendationTomorrow(best) {
   recommendCard.innerHTML = html;
 }
 
-// ---------------------------------------------------------------------------
-// INITIAL STATE
-// ---------------------------------------------------------------------------
+
+//initial state
+
 showView("home");
 recordStatus.textContent = "Please login to start.";

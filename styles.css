@@ -3,9 +3,9 @@
   --bg-alt: #ecfdf5;
   --card-bg: #ffffff;
   --card-soft: #f9fafb;
-  --accent: #2563eb;       /* primary blue */
-  --accent-alt: #22c55e;   /* green accent */
-  --accent-soft: #dbeafe;  /* light blue */
+  --accent: #2563eb;  
+  --accent-alt: #22c55e; 
+  --accent-soft: #dbeafe; 
   --accent-soft-green: #dcfce7;
   --accent-deep: #1e40af;
   --text-main: #0f172a;
@@ -13,10 +13,6 @@
   --border-soft: #e5e7eb;
   --danger: #ef4444;
 }
-
-/* ------------------------------------------------------------------ */
-/* Base                                                                */
-/* ------------------------------------------------------------------ */
 
 *,
 *::before,
@@ -36,9 +32,6 @@ body {
   display: none !important;
 }
 
-/* ------------------------------------------------------------------ */
-/* Shell & header                                                      */
-/* ------------------------------------------------------------------ */
 
 .app-shell {
   max-width: 1100px;
@@ -95,9 +88,6 @@ main {
   box-shadow: 0 24px 40px rgba(15, 23, 42, 0.14);
 }
 
-/* ------------------------------------------------------------------ */
-/* Views                                                               */
-/* ------------------------------------------------------------------ */
 
 .view {
   display: none;
@@ -107,9 +97,6 @@ main {
   display: block;
 }
 
-/* ------------------------------------------------------------------ */
-/* Record section                                                      */
-/* ------------------------------------------------------------------ */
 
 .record-section {
   display: flex;
@@ -156,9 +143,6 @@ main {
   color: var(--text-muted);
 }
 
-/* ------------------------------------------------------------------ */
-/* Common layout helpers                                               */
-/* ------------------------------------------------------------------ */
 
 .center-row {
   display: flex;
@@ -166,9 +150,6 @@ main {
   margin: 12px 0 4px;
 }
 
-/* ------------------------------------------------------------------ */
-/* Buttons & pills                                                     */
-/* ------------------------------------------------------------------ */
 
 .pill-btn {
   padding: 10px 24px;
@@ -196,7 +177,6 @@ main {
   box-shadow: none;
 }
 
-/* dark pill used for "View Analytics" */
 .primary-view-btn {
   padding: 10px 24px;
   border-radius: 999px;
@@ -217,7 +197,6 @@ main {
   box-shadow: 0 14px 26px rgba(15, 23, 42, 0.7);
 }
 
-/* Past-walk table view button */
 .table-view-btn {
   padding: 6px 12px;
   border-radius: 999px;
@@ -235,9 +214,6 @@ main {
   box-shadow: 0 9px 18px rgba(37, 99, 235, 0.5);
 }
 
-/* ------------------------------------------------------------------ */
-/* Recommendations                                                     */
-/* ------------------------------------------------------------------ */
 
 .recommend-row {
   display: flex;
@@ -284,9 +260,6 @@ main {
   margin: 10px 0;
 }
 
-/* ------------------------------------------------------------------ */
-/* Past walks table                                                    */
-/* ------------------------------------------------------------------ */
 
 .past-walks {
   margin-top: 32px;
@@ -328,9 +301,6 @@ main {
   background: #e0f2fe;
 }
 
-/* ------------------------------------------------------------------ */
-/* Analytics view                                                      */
-/* ------------------------------------------------------------------ */
 
 .back-btn {
   border: none;
@@ -392,9 +362,6 @@ main {
   font-weight: 600;
 }
 
-/* ------------------------------------------------------------------ */
-/* Extra sections (charts, map, history)                              */
-/* ------------------------------------------------------------------ */
 
 .extra-charts {
   margin-top: 28px;
@@ -404,7 +371,6 @@ main {
   margin-bottom: 10px;
 }
 
-/* Walk route map */
 
 .route-map {
   width: 100%;
@@ -423,7 +389,6 @@ main {
   font-size: 0.9rem;
 }
 
-/* History view */
 
 #historyView h2 {
   margin-top: 0;
@@ -433,7 +398,6 @@ main {
   margin-bottom: 20px;
 }
 
-/* Chart wrappers */
 
 .chart-wrapper {
   position: relative;
@@ -452,9 +416,6 @@ main {
   height: 100% !important;
 }
 
-/* ------------------------------------------------------------------ */
-/* Responsive                                                          */
-/* ------------------------------------------------------------------ */
 
 @media (max-width: 900px) {
   .cards-grid {

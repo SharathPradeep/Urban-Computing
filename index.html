@@ -5,7 +5,6 @@
   <title>Walk Guide</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <!-- Leaflet CSS for map -->
   <link
     rel="stylesheet"
     href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -28,7 +27,6 @@
     </header>
 
     <main>
-      <!-- HOME VIEW -------------------------------------------------------->
       <section id="homeView" class="view active">
         <div class="record-section">
           <button id="recordButton" class="circle-btn" disabled>
@@ -40,7 +38,6 @@
         </div>
 
         <div class="center-row">
-          <!-- Styled like the dark "View" buttons -->
           <button id="quickAnalyticsButton" class="primary-view-btn" hidden>
             View Analytics
           </button>
@@ -60,7 +57,7 @@
           class="recommend-section hidden"
         >
           <div id="recommendCard" class="recommend-card">
-            <!-- Filled dynamically -->
+
           </div>
         </section>
 
@@ -77,7 +74,7 @@
               </tr>
             </thead>
             <tbody id="walksTableBody">
-              <!-- rows injected -->
+
             </tbody>
           </table>
         </section>
@@ -92,7 +89,7 @@
         </div>
       </section>
 
-      <!-- PER-WALK ANALYTICS VIEW ----------------------------------------->
+
       <section id="analyticsView" class="view">
         <button class="back-btn" id="backFromAnalytics">
           ← Back to Home
@@ -151,7 +148,7 @@
           </article>
         </div>
 
-        <!-- Walk route map -->
+
         <section class="extra-charts">
           <h3>Walk Route</h3>
           <div id="routeMap" class="route-map map-empty">
@@ -160,7 +157,7 @@
         </section>
       </section>
 
-      <!-- HISTORY ANALYTICS VIEW ------------------------------------------>
+
       <section id="historyView" class="view">
         <button class="back-btn" id="backFromHistory">
           ← Back to Home
@@ -185,16 +182,16 @@
     </main>
   </div>
 
-  <!-- Leaflet JS for map -->
+
   <script
     src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
     crossorigin=""
   ></script>
 
-  <!-- Chart.js -->
+
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <!-- App -->
+
   <script type="module" src="app.js"></script>
 </body>
 </html>
